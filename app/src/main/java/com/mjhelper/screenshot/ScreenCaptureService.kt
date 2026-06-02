@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
@@ -21,7 +22,6 @@ import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import java.io.ByteArrayOutputStream
-import java.io.FileOutputStream
 
 class ScreenCaptureService : Service() {
 
@@ -69,11 +69,21 @@ class ScreenCaptureService : Service() {
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         wm.defaultDisplay.getMetrics(metrics)
-        screenWidth = metrics.widthPixels / 2  // 缩小一半减少内存
+        screenWidth = metrics.widthPixels / 2
         screenHeight = metrics.heightPixels / 2
         screenDensity = metrics.densityDpi / 2
 
-        startForeground(NOTIFICATION_ID, createNotification())
+        // Android 14+ 必须指定 foregroundServiceType
+        val notification = createNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID, notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+
         startScreenCapture()
         isRunning = true
 
@@ -81,28 +91,34 @@ class ScreenCaptureService : Service() {
     }
 
     private fun startScreenCapture() {
-        val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        mediaProjection = projectionManager.getMediaProjection(resultCode, resultData!!)
+        try {
+            val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            mediaProjection = projectionManager.getMediaProjection(resultCode, resultData!!)
 
-        imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
-        
-        virtualDisplay = mediaProjection?.createVirtualDisplay(
-            "MJScreenCapture",
-            screenWidth, screenHeight, screenDensity,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            imageReader?.surface,
-            null, null
-        )
+            imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
 
-        // 每1秒截一次屏
-        handler.postDelayed(object : Runnable {
-            override fun run() {
-                if (isRunning) {
-                    captureScreen()
-                    handler.postDelayed(this, 1000)
+            virtualDisplay = mediaProjection?.createVirtualDisplay(
+                "MJScreenCapture",
+                screenWidth, screenHeight, screenDensity,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                imageReader?.surface,
+                null, null
+            )
+
+            // 每1秒截一次屏
+            handler.postDelayed(object : Runnable {
+                override fun run() {
+                    if (isRunning) {
+                        captureScreen()
+                        handler.postDelayed(this, 1000)
+                    }
                 }
-            }
-        }, 1000)
+            }, 1000)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            isRunning = false
+            stopSelf()
+        }
     }
 
     private fun captureScreen() {
@@ -127,7 +143,7 @@ class ScreenCaptureService : Service() {
                 val cropped = Bitmap.createBitmap(bitmap, 0, cropTop, bitmap.width, bitmap.height - cropTop)
                 bitmap.recycle()
 
-                // 压缩为PNG
+                // 压缩为JPEG
                 val stream = ByteArrayOutputStream()
                 cropped.compress(Bitmap.CompressFormat.JPEG, 80, stream)
                 latestScreenshot = stream.toByteArray()
@@ -162,7 +178,7 @@ class ScreenCaptureService : Service() {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle("🀄 麻将截屏助手")
-                .setContentText("截屏服务运行中，浏览器可自动获取截图")
+                .setContentText("截屏服务运行中")
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setOngoing(true)
                 .build()
