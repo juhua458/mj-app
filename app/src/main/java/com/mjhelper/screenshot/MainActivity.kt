@@ -16,6 +16,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var tvStatus: TextView
     private lateinit var tvAddress: TextView
+    private lateinit var tvHint: TextView
     private lateinit var btnStart: Button
     private lateinit var swAutoStart: Switch
     private var isRunning = false
@@ -48,6 +49,7 @@ class MainActivity : AppCompatActivity() {
 
         tvStatus = findViewById(R.id.tvStatus)
         tvAddress = findViewById(R.id.tvAddress)
+        tvHint = findViewById(R.id.tvHint)
         btnStart = findViewById(R.id.btnStart)
         swAutoStart = findViewById(R.id.swAutoStart)
 
@@ -65,7 +67,8 @@ class MainActivity : AppCompatActivity() {
         swAutoStart.isChecked = getSharedPreferences("mj_helper", Context.MODE_PRIVATE)
             .getBoolean("auto_start", false)
 
-        tvAddress.text = "http://${getLocalIpAddress()}:8666"
+        val addr = "http://${getLocalIpAddress()}:8666"
+        tvAddress.text = addr
     }
 
     private fun requestScreenCapture() {
@@ -82,13 +85,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateUI() {
         if (isRunning) {
-            tvStatus.text = "✅ 运行中 — 浏览器打开下面的地址"
+            tvStatus.text = "✅ 运行中"
             tvStatus.setTextColor(getColor(android.R.color.holo_green_dark))
-            btnStart.text = "⏹ 停止"
+            btnStart.text = "⏹ 停止截屏"
+            tvHint.text = "👉 用Edge浏览器打开上面的地址\n即可使用麻将提示器"
+            tvHint.setTextColor(getColor(android.R.color.holo_orange_dark))
         } else {
             tvStatus.text = "⏸ 未启动"
             tvStatus.setTextColor(getColor(android.R.color.darker_gray))
             btnStart.text = "🚀 开始截屏"
+            tvHint.text = "点击上方按钮启动截屏服务"
+            tvHint.setTextColor(getColor(android.R.color.darker_gray))
         }
     }
 

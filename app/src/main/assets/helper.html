@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>🀄 捉鸡麻将提示器 v10</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{--bg:#0a0e1a;--bg2:#131825;--card:#1c2333;--card2:#252d40;--text:#e8edf5;--text2:#8b95a8;--text3:#555f73;
+--red:#e54545;--green:#2ebd5e;--blue:#4a8eff;--gold:#f0a030;--purple:#9b5dff;--cyan:#22c5d4;
+--safe:#2ebd5e;--danger:#e54545;--warn:#e0a820}
+html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);font-size:13px}
+.app{display:flex;flex-direction:column;height:100vh;width:100vw}
+.top-bar{padding:8px 12px;background:linear-gradient(135deg,#5b21b6,#7c3aed);display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.top-bar h1{font-size:0.85rem;font-weight:700}.top-actions{display:flex;gap:5px}
+.top-btn{padding:4px 8px;border:none;border-radius:5px;font-size:0.65rem;font-weight:600;cursor:pointer;background:rgba(255,255,255,0.2);color:#fff}
+.status-bar{display:flex;gap:6px;padding:6px 12px;background:var(--bg2);flex-wrap:wrap;flex-shrink:0}
+.chip{padding:2px 8px;border-radius:10px;font-size:0.65rem;font-weight:600}
+.chip.early{background:var(--safe);color:#000}.chip.mid{background:var(--gold);color:#000}.chip.late{background:var(--danger);color:#fff}
+.chip.cnt{background:var(--purple);color:#fff}.chip.rem{background:var(--card2);color:var(--text)}.chip.chk{background:var(--gold);color:#000}
+.auto-section{padding:8px 12px;background:var(--bg2);flex-shrink:0}
+.auto-status{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:0.75rem}
+.auto-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.auto-dot.on{background:var(--safe);animation:blink 1s infinite}
+.auto-dot.off{background:var(--danger)}.auto-dot.try{background:var(--gold);animation:blink .5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.auto-btns{display:flex;gap:6px}
+.abtn{flex:1;padding:10px;border:none;border-radius:8px;font-size:0.8rem;font-weight:700;cursor:pointer;color:#fff}
+.abtn.start{background:linear-gradient(135deg,var(--green),#1a9c4a)}
+.abtn.stop{background:linear-gradient(135deg,var(--danger),#c03030)}
+.abtn.snap{background:linear-gradient(135deg,var(--blue),#2a6ed4)}
+.abtn:active{transform:scale(.97)}
+.preview{width:100%;height:100px;background:#000;border-radius:8px;overflow:hidden;margin-top:6px;position:relative}
+.preview canvas{width:100%;height:100%;object-fit:contain;display:none}
+.preview .no-src{display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:.75rem}
+.ocr-tag{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.8);padding:2px 6px;border-radius:6px;font-size:.55rem;display:flex;align-items:center;gap:3px}
+.ocr-row{display:flex;gap:2px;flex-wrap:wrap;padding:6px 12px;background:var(--bg2);min-height:28px;flex-shrink:0}
+.ocr-chip{width:22px;height:30px;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.45rem;font-weight:700;color:#fff}
+.ocr-chip.wan{background:var(--red)}.ocr-chip.tiao{background:var(--green)}.ocr-chip.tong{background:var(--blue)}
+.hand-area{padding:8px 12px;background:var(--bg2);flex-shrink:0}
+.hand-row{display:flex;gap:3px;flex-wrap:wrap;min-height:44px;padding:4px;background:var(--bg);border-radius:8px}
+.tile{width:32px;height:44px;border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:transform .1s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.tile.wan{background:linear-gradient(180deg,#fff,#fde8e8)}.tile.tiao{background:linear-gradient(180deg,#fff,#e8fde8)}.tile.tong{background:linear-gradient(180deg,#fff,#e8e8fd)}
+.tile .tn{font-size:14px;font-weight:800;line-height:1}.tile.wan .tn{color:var(--red)}.tile.tiao .tn{color:var(--green)}.tile.tong .tn{color:var(--blue)}
+.tile .ts{font-size:6px;opacity:.6;margin-top:1px}
+.tile.sel{border:2px solid var(--gold);box-shadow:0 0 8px rgba(240,160,48,.5);transform:translateY(-3px)}
+.op-row{display:flex;gap:6px;margin-top:6px}
+.op-btn{flex:1;padding:10px;border:none;border-radius:8px;font-size:.85rem;font-weight:800;cursor:pointer;color:#fff}
+.op-btn:active{transform:scale(.97)}
+.op-btn.draw{background:linear-gradient(135deg,var(--green),#1a9c4a)}
+.op-btn.discard{background:linear-gradient(135deg,var(--blue),#2a6ed4)}
+.op-btn:disabled{opacity:.4;cursor:not-allowed}
+.op-sub{font-size:.55rem;opacity:.7;font-weight:400}
+.miss-bar{padding:4px 12px;font-size:.7rem;flex-shrink:0}
+.miss-bar.ok{color:var(--safe)}.miss-bar.warn{color:var(--warn)}
+.strategy{flex:1;overflow-y:auto;padding:8px 12px;-webkit-overflow-scrolling:touch}
+.tab-bar{display:flex;gap:4px;margin-bottom:8px;flex-shrink:0}
+.tab-btn{flex:1;padding:6px;border:none;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;background:var(--card);color:var(--text2)}
+.tab-btn.active{background:var(--gold);color:#000}
+.tab-content{display:none}.tab-content.active{display:block}
+.best-card{background:var(--card);border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid rgba(240,160,48,.3)}
+.best-label{font-size:.65rem;color:var(--gold);margin-bottom:4px}
+.best-tile{font-size:1.5rem;font-weight:800;text-align:center;margin:4px 0}
+.reasons{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.rtag{padding:2px 6px;border-radius:4px;font-size:.6rem;font-weight:600}
+.rtag.good{background:rgba(46,189,94,.2);color:var(--safe)}.rtag.bad{background:rgba(229,69,69,.2);color:var(--danger)}.rtag.warn{background:rgba(224,168,32,.2);color:var(--warn)}.rtag.info{background:rgba(74,142,255,.2);color:var(--blue)}
+.prob-row{display:flex;align-items:center;gap:6px;margin:3px 0}
+.prob-name{width:36px;font-size:.7rem;font-weight:700;flex-shrink:0}
+.prob-bar{flex:1;height:16px;background:var(--bg);border-radius:8px;overflow:hidden;position:relative}
+.prob-fill{height:100%;border-radius:8px;font-size:.55rem;font-weight:600;color:#fff;display:flex;align-items:center;justify-content:flex-end;padding-right:4px;min-width:24px}
+.prob-fill.high{background:var(--safe)}.prob-fill.mid{background:var(--gold)}.prob-fill.low{background:var(--danger)}
+.alt-item{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:.7rem;border-bottom:1px solid rgba(255,255,255,.05)}
+.alt-rank{width:18px;height:18px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:.55rem;font-weight:700;flex-shrink:0}
+.alt-name{font-weight:700;flex-shrink:0;width:30px}.alt-detail{color:var(--text2);flex:1}.alt-badges{display:flex;gap:3px}
+.def-item{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:6px;margin:2px;font-size:.7rem;font-weight:600}
+.def-item.safe{background:rgba(46,189,94,.15);color:var(--safe)}.def-item.mid{background:rgba(224,168,32,.15);color:var(--warn)}.def-item.danger{background:rgba(229,69,69,.15);color:var(--danger)}
+.rem-row{display:flex;align-items:center;gap:2px;margin:3px 0}
+.rem-label{width:18px;font-size:.65rem;font-weight:700;flex-shrink:0}
+.rem-cell{width:28px;height:28px;border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.55rem;font-weight:600;background:var(--card)}
+.rem-cell.inhand{border:1px solid var(--gold)}
+.rem-cell.c0{background:rgba(229,69,69,.2)}.rem-cell.c1{background:rgba(224,168,32,.2)}.rem-cell.c2{background:rgba(74,142,255,.15)}
+.rem-cell .rn{line-height:1}.rem-cell .rc{font-size:.5rem;color:var(--text2)}
+.disc-tile{display:inline-flex;width:22px;height:28px;border-radius:3px;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;color:#fff;margin:1px}
+.disc-tile.wan{background:rgba(229,69,69,.5)}.disc-tile.tiao{background:rgba(46,189,94,.5)}.disc-tile.tong{background:rgba(74,142,255,.5)}
+.disc-tile.hl{border:1px solid var(--gold)}
+.opp-row{margin:4px 0}.opp-label{font-size:.6rem;color:var(--text3);margin-bottom:2px}
+.warn-box{background:rgba(229,69,69,.1);border:1px solid rgba(229,69,69,.3);border-radius:8px;padding:8px;font-size:.7rem;color:var(--danger);margin-top:6px}
+.chicken-box{background:rgba(240,160,48,.1);border:1px solid rgba(240,160,48,.3);border-radius:8px;padding:8px;font-size:.7rem;color:var(--gold);margin-top:6px}
+.modal-mask{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:100;align-items:flex-end;justify-content:center}
+.modal-mask.show{display:flex}
+.modal-body{width:100%;max-height:70vh;background:var(--bg2);border-radius:16px 16px 0 0;padding:16px;overflow-y:auto}
+.modal-title{font-size:.85rem;font-weight:700;margin-bottom:10px}
+.modal-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:4px}
+.mg-tile{padding:8px 0;border-radius:6px;text-align:center;font-size:.7rem;font-weight:700;cursor:pointer;background:var(--card)}
+.mg-tile:active{background:var(--card2)}
+.mg-tile.wan{color:var(--red)}.mg-tile.tiao{color:var(--green)}.mg-tile.tong{color:var(--blue)}
+.mg-tile.has{background:var(--gold);color:#000}
+.modal-actions{display:flex;gap:8px;margin-top:12px}
+.modal-btn{flex:1;padding:10px;border:none;border-radius:8px;font-size:.8rem;font-weight:700;cursor:pointer;color:#fff}
+.modal-btn.ok{background:var(--green)}.modal-btn.cancel{background:var(--card2);color:var(--text)}
+.toast{position:fixed;top:60px;left:50%;transform:translateX(-50%) translateY(-20px);background:rgba(0,0,0,.85);color:#fff;padding:6px 16px;border-radius:20px;font-size:.7rem;z-index:200;opacity:0;transition:all .3s;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="top-bar">
+<h1>🀄 捉鸡麻将 v10</h1>
+<div class="top-actions">
+<button class="top-btn" onclick="openHandEditor()">✏手牌</button>
+<button class="top-btn" onclick="openOppModal(-1)">👥对手</button>
+<button class="top-btn" onclick="undoAction()">↩撤销</button>
+<button class="top-btn" onclick="newGame()">🔄新局</button>
+</div>
+</div>
+<div class="status-bar">
+<span class="chip early" id="phaseBadge">前期</span>
+<span class="chip cnt" id="tileCount">0张</span>
+<span class="chip rem" id="remainCount">84张可摸</span>
+<span class="chip chk" id="chickBadge" style="display:none">🐔鸡牌</span>
+</div>
+<div class="auto-section">
+<div class="auto-status">
+<span class="auto-dot try" id="autoDot"></span>
+<span id="autoText">正在连接截屏App...</span>
+<span style="margin-left:auto;font-size:.6rem;color:var(--text3)" id="ocrStats"></span>
+</div>
+<div class="auto-btns">
+<button class="abtn start" id="btnStart" onclick="startAuto()">▶ 启动自动识别</button>
+<button class="abtn stop" id="btnStop" onclick="stopAuto()" style="display:none">⏹ 停止</button>
+<button class="abtn snap" onclick="snapOnce()">📸 单次</button>
+</div>
+<div class="preview">
+<canvas id="cvs"></canvas>
+<div class="no-src" id="noSrc">安装截屏App后点「启动自动识别」</div>
+<div class="ocr-tag" id="ocrTag" style="display:none"><span class="auto-dot on"></span><span id="ocrLabel">识别中</span></div>
+</div>
+</div>
+<div class="ocr-row" id="ocrRow"></div>
+<div class="hand-area">
+<div class="hand-row" id="handDisplay"><span style="color:var(--text3);font-size:.7rem">点✏手牌设置或启动自动识别</span></div>
+<div class="op-row">
+<button class="op-btn draw" onclick="drawTile()">摸牌<span class="op-sub">+1</span></button>
+<button class="op-btn discard" onclick="confirmDiscard()" id="btnDiscard" disabled>打出<span class="op-sub">选中牌</span></button>
+</div>
+</div>
+<div class="miss-bar" id="missBar"></div>
+<div class="strategy">
+<div class="tab-bar">
+<button class="tab-btn active" onclick="switchTab('advice')">🎯建议</button>
+<button class="tab-btn" onclick="switchTab('ting')">聴牌</button>
+<button class="tab-btn" onclick="switchTab('defense')">🛡防守</button>
+<button class="tab-btn" onclick="switchTab('remain')">📊剩余</button>
+<button class="tab-btn" onclick="switchTab('discard')">🗑弃牌</button>
+</div>
+<div class="tab-content active" id="tabAdvice"></div>
+<div class="tab-content" id="tabTing"></div>
+<div class="tab-content" id="tabDefense"></div>
+<div class="tab-content" id="tabRemain"></div>
+<div class="tab-content" id="tabDiscard"></div>
+</div>
+</div>
+<div class="modal-mask" id="handModal"><div class="modal-body"><div class="modal-title">✏ 编辑手牌（点击添加/移除）</div><div class="modal-grid" id="editGrid"></div><div class="modal-actions"><button class="modal-btn cancel" onclick="closeHandModal()">取消</button><button class="modal-btn ok" onclick="applyHandEdit()">✓ 确认</button></div></div></div>
+<div class="modal-mask" id="oppModal"><div class="modal-body"><div class="modal-title">👥 对手弃牌</div><div style="display:flex;gap:6px;margin-bottom:8px"><button class="top-btn" style="background:var(--red)" onclick="setOppTarget(0)">下家</button><button class="top-btn" style="background:var(--green)" onclick="setOppTarget(1)">对家</button><button class="top-btn" style="background:var(--blue)" onclick="setOppTarget(2)">上家</button></div><div class="modal-grid" id="oppGrid"></div><div class="modal-actions"><button class="modal-btn cancel" onclick="closeOppModal()">关闭</button></div></div></div>
+<div class="toast" id="toast"></div>
+<script>
+var TN=['一','二','三','四','五','六','七','八','九'];
+var APP_URL='http://localhost:8666';
+var hand=new Array(27).fill(0),selectedTile=-1;
+var myDiscards=[],allDiscards=[],opponentDiscards=[[],[],[]];
+var totalDiscarded=0,phase='early',thrownChick=false;
+var isAuto=false,autoTimer=null,ocrCnt=0,ocrTm=0;
+var editTemp=null,oppTarget=0,frameResults=[];
+
+async function startAuto(){
+    isAuto=true;
+    document.getElementById('btnStart').style.display='none';
+    document.getElementById('btnStop').style.display='';
+    document.getElementById('autoDot').className='auto-dot try';
+    document.getElementById('autoText').textContent='连接中...';
+    tryAutoConnect();
+}
+async function tryAutoConnect(){
+    if(!isAuto)return;
+    try{
+        var r=await fetch(APP_URL+'/api/status',{cache:'no-store',signal:AbortSignal.timeout(3000)});
+        if(r.ok){
+            document.getElementById('autoDot').className='auto-dot on';
+            document.getElementById('autoText').textContent='✅ 截屏App已连接';
+            document.getElementById('ocrTag').style.display='flex';
+            showToast('✅ 自动识别已启动！');
+            autoLoop();return;
+        }
+    }catch(e){}
+    document.getElementById('autoDot').className='auto-dot off';
+    document.getElementById('autoText').textContent='❌ 未连接，3秒后重试...';
+    autoTimer=setTimeout(tryAutoConnect,3000);
+}
+async function autoLoop(){
+    if(!isAuto)return;
+    var t0=performance.now();
+    try{
+        var r=await fetch(APP_URL+'/api/screenshot?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(2000)});
+        if(r.ok){
+            var blob=await r.blob();
+            var img=new Image();
+            img.onload=function(){
+                var c=document.getElementById('cvs');
+                c.width=img.width;c.height=img.height;
+                c.getContext('2d').drawImage(img,0,0);
+                c.style.display='block';
+                document.getElementById('noSrc').style.display='none';
+                var res=analyzeFrame(c);
+                if(res.length>0)updateOcrResult(res);
+                var ms=Math.round(performance.now()-t0);
+                ocrCnt++;ocrTm+=ms;
+                document.getElementById('ocrStats').textContent=ocrCnt+'次 '+Math.round(ocrTm/ocrCnt)+'ms';
+            };
+            img.src=URL.createObjectURL(blob);
+        }
+    }catch(e){}
+    autoTimer=setTimeout(autoLoop,800);
+}
+function stopAuto(){
+    isAuto=false;
+    if(autoTimer){clearTimeout(autoTimer);autoTimer=null}
+    document.getElementById('btnStart').style.display='';
+    document.getElementById('btnStop').style.display='none';
+    document.getElementById('autoDot').className='auto-dot off';
+    document.getElementById('autoText').textContent='已停止';
+    document.getElementById('ocrTag').style.display='none';
+}
+function snapOnce(){if(!isAuto)startAuto()}
+
+function analyzeFrame(canvas){
+    var ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
+    var handR={x:Math.floor(w*.08),y:Math.floor(h*.78),w:Math.floor(w*.84),h:Math.floor(h*.18)};
+    if(handR.w<10||handR.h<10)return[];
+    var imgData=ctx.getImageData(handR.x,handR.y,handR.w,handR.h);
+    var detected=detectTiles(imgData,handR.w,handR.h);
+    frameResults.push(detected);
+    if(frameResults.length>5)frameResults.shift();
+    return voteResults(frameResults);
+}
+function detectTiles(imgData,w,h){
+    var d=imgData.data,tiles=[];
+    var segments=14,segW=Math.floor(w/segments);
+    for(var s=0;s<segments;s++){
+        var x0=s*segW,x1=x0+segW;
+        var rS=0,gS=0,bS=0,bright=0,total=0;
+        for(var y=Math.floor(h*.15);y<Math.floor(h*.85);y++){
+            for(var x=x0;x<x1;x++){
+                var i=(y*w+x)*4;
+                var r=d[i],g=d[i+1],b=d[i+2];
+                total++;
+                if(r>180&&g>180&&b>180)bright++;
+                rS+=r;gS+=g;bS+=b;
+            }
+        }
+        var brightR=bright/Math.max(1,total);
+        if(brightR<.25)continue;
+        var avgR=rS/total,avgG=gS/total,avgB=bS/total;
+        var suit,suitName;
+        if(avgR>avgG+25&&avgR>avgB+25){suit='wan';suitName='万'}
+        else if(avgG>avgR+20&&avgG>avgB+20){suit='tiao';suitName='条'}
+        else if(avgB>avgR+15&&avgB>avgG+15){suit='tong';suitName='筒'}
+        else continue;
+        var num=guessNumber(d,x0,x1,h,w,suit);
+        var idx=suit==='wan'?num-1:suit==='tiao'?num+8:num+17;
+        if(idx>=0&&idx<27)tiles.push({idx:idx,conf:brightR});
+    }
+    return tiles;
+}
+function guessNumber(d,x0,x1,h,w,suit){
+    var grid=[],sw=x1-x0,sh=h;
+    for(var gy=0;gy<3;gy++){
+        for(var gx=0;gx<3;gx++){
+            var cnt=0,total=0;
+            for(var y=Math.floor(sh*gy/3);y<Math.floor(sh*(gy+1)/3);y++){
+                for(var x=Math.floor(sw*gx/3);x<Math.floor(sw*(gx+1)/3);x++){
+                    var i=(y*w+(x0+x))*4;
+                    var r=d[i],g=d[i+1],b=d[i+2];total++;
+                    if(suit==='wan'&&r>150&&g<100&&b<100)cnt++;
+                    else if(suit==='tiao'&&g>130&&r<100&&b<100)cnt++;
+                    else if(suit==='tong'&&b>130&&r<100&&g<100)cnt++;
+                }
+            }
+            grid.push(total>0?cnt/total:0);
+        }
+    }
+    var patterns=[
+        [0,.3,0,0,.5,0,0,.3,0],
+        [.3,.3,0,0,.3,.2,.3,.3,.3],
+        [.3,.3,0,0,.3,.2,0,.3,.3],
+        [.2,0,.2,.3,.3,.3,0,0,.2],
+        [.3,.3,.3,0,.3,0,.3,.3,0],
+        [.3,.3,.3,.3,.3,0,.3,.3,0],
+        [.3,.3,0,0,.2,0,0,.2,0],
+        [.3,.3,.3,.3,.3,.3,.3,.3,.3],
+        [.3,.3,.3,0,.3,.3,.3,.3,.3]
+    ];
+    var bestNum=1,bestScore=-1;
+    for(var n=0;n<9;n++){
+        var score=0;
+        for(var k=0;k<9;k++)score+=grid[k]*patterns[n][k];
+        if(score>bestScore){bestScore=score;bestNum=n+1}
+    }
+    return bestNum;
+}
+function voteResults(frames){
+    if(!frames.length)return[];
+    var counts={};
+    frames.forEach(function(f){f.forEach(function(t){counts[t.idx]=(counts[t.idx]||0)+1})});
+    var result=[];
+    for(var k in counts){if(counts[k]>=Math.max(2,frames.length-1))result.push(parseInt(k))}
+    return result.sort(function(a,b){return a-b});
+}
+function updateOcrResult(tiles){
+    var el=document.getElementById('ocrRow');
+    if(!tiles.length){el.innerHTML='';return}
+    var html='';
+    tiles.forEach(function(idx){
+        var suit=idx<9?'wan':idx<18?'tiao':'tong';
+        html+='<div class="ocr-chip '+suit+'">'+TN[idx%9]+(suit==='wan'?'万':suit==='tiao'?'条':'筒')+'</div>';
+    });
+    el.innerHTML=html;
+    hand=new Array(27).fill(0);
+    tiles.forEach(function(idx){hand[idx]++});
+    selectedTile=-1;
+    document.getElementById('btnDiscard').disabled=true;
+    updateDisplay();
+    showToast('识别到 '+tiles.length+' 张牌');
+}
+function openHandEditor(){editTemp=hand.slice();renderEditGrid();document.getElementById('handModal').classList.add('show')}
+function renderEditGrid(){
+    var html='';
+    [['万',0,'wan'],['条',9,'tiao'],['筒',18,'tong']].forEach(function(c){
+        html+='<div style="grid-column:1/-1;font-size:.7rem;font-weight:700;color:var(--'+c[2]+');margin-top:4px">'+c[0]+'</div>';
+        for(var i=0;i<9;i++){
+            var idx=c[1]+i,cls=editTemp[idx]>0?' has':'';
+            html+='<div class="mg-tile '+c[2]+cls+'" onclick="toggleEditTile('+idx+')">'+TN[i]+'<div style="font-size:.5rem">'+editTemp[idx]+'</div></div>';
+        }
+    });
+    document.getElementById('editGrid').innerHTML=html;
+}
+function toggleEditTile(idx){editTemp[idx]=(editTemp[idx]+1)%5;renderEditGrid()}
+function applyHandEdit(){hand=editTemp.slice();selectedTile=-1;document.getElementById('btnDiscard').disabled=true;closeHandModal();updateDisplay()}
+function closeHandModal(){document.getElementById('handModal').classList.remove('show')}
+function openOppModal(t){if(t>=0)oppTarget=t;renderOppGrid();document.getElementById('oppModal').classList.add('show')}
+function setOppTarget(t){oppTarget=t;renderOppGrid()}
+function renderOppGrid(){
+    var html='';
+    [['万',0,'wan'],['条',9,'tiao'],['筒',18,'tong']].forEach(function(c){
+        html+='<div style="grid-column:1/-1;font-size:.7rem;font-weight:700;color:var(--'+c[2]+');margin-top:4px">'+c[0]+'</div>';
+        for(var i=0;i<9;i++){var idx=c[1]+i;html+='<div class="mg-tile '+c[2]+'" onclick="addOppDiscard('+idx+')">'+TN[i]+'</div>'}
+    });
+    document.getElementById('oppGrid').innerHTML=html;
+}
+function addOppDiscard(idx){
+    opponentDiscards[oppTarget].push(idx);
+    allDiscards.push({idx:idx,who:'opp'+oppTarget});
+    totalDiscarded++;renderOppGrid();updateDisplay();showToast('对手打 '+getTileName(idx));
+}
+function closeOppModal(){document.getElementById('oppModal').classList.remove('show')}
+function drawTile(){showToast('请点击手牌选中要打的牌')}
+function confirmDiscard(){if(selectedTile<0){showToast('先点选要打的牌');return}doDiscard()}
+function doDiscard(){
+    if(selectedTile<0||hand[selectedTile]<=0)return;
+    hand[selectedTile]--;myDiscards.push(selectedTile);
+    allDiscards.push({idx:selectedTile,who:'me'});totalDiscarded++;
+    if(selectedTile===0||selectedTile===9||selectedTile===18)thrownChick=true;
+    selectedTile=-1;document.getElementById('btnDiscard').disabled=true;updateDisplay();
+}
+function undoAction(){
+    if(!allDiscards.length)return;
+    var last=allDiscards.pop();
+    if(last.who==='me'){var idx=myDiscards.pop();hand[idx]++;if(idx===0||idx===9||idx===18)thrownChick=false}
+    else{var oi=parseInt(last.who.replace('opp',''));opponentDiscards[oi].pop()}
+    totalDiscarded--;updateDisplay();showToast('已撤销');
+}
+function newGame(){
+    hand=new Array(27).fill(0);selectedTile=-1;
+    myDiscards=[];allDiscards=[];opponentDiscards=[[],[],[]];
+    totalDiscarded=0;phase='early';thrownChick=false;frameResults=[];
+    document.getElementById('btnDiscard').disabled=true;updateDisplay();showToast('新局开始');
+}
+function updateDisplay(){updateHandDisplay();updateStats();updateMissing();updateAllPanels()}
+function updateHandDisplay(){
+    var el=document.getElementById('handDisplay'),tiles=[];
+    for(var i=0;i<27;i++)for(var j=0;j<hand[i];j++)tiles.push(i);
+    if(!tiles.length){el.innerHTML='<span style="color:var(--text3);font-size:.7rem">点✏手牌设置或启动自动识别</span>';return}
+    var html='';
+    tiles.forEach(function(idx){
+        var suit=idx<9?'wan':idx<18?'tiao':'tong';
+        var sn=suit==='wan'?'万':suit==='tiao'?'条':'筒';
+        var sel=idx===selectedTile?' sel':'';
+        html+='<div class="tile '+suit+sel+'" onclick="selectTile('+idx+')"><span class="tn">'+TN[idx%9]+'</span><span class="ts">'+sn+'</span></div>';
+    });
+    el.innerHTML=html;
+}
+function selectTile(idx){if(selectedTile===idx){confirmDiscard()}else{selectedTile=idx;document.getElementById('btnDiscard').disabled=false;updateHandDisplay()}}
+function updateStats(){
+    var total=getTotal();
+    document.getElementById('tileCount').textContent=total+'张';
+    document.getElementById('remainCount').textContent=(84-totalDiscarded)+'张可摸';
+    var pb=document.getElementById('phaseBadge');
+    if(totalDiscarded<=12){phase='early';pb.textContent='前期';pb.className='chip early'}
+    else if(totalDiscarded<=36){phase='mid';pb.textContent='中期';pb.className='chip mid'}
+    else{phase='late';pb.textContent='后期';pb.className='chip late'}
+    document.getElementById('chickBadge').style.display=thrownChick?'':'none';
+}
+function updateMissing(){
+    var el=document.getElementById('missBar'),total=getTotal();
+    if(!total){el.textContent='';return}
+    var hasW=hasSuit(0,9),hasT=hasSuit(9,18),hasB=hasSuit(18,27);
+    var miss=(!hasW?1:0)+(!hasT?1:0)+(!hasB?1:0);
+    if(miss>=1){el.className='miss-bar ok';el.textContent='✅ 已缺门'}
+    else{el.className='miss-bar warn';el.textContent='⚠️ 需缺1门才能胡'}
+}
+function hasSuit(s,e){for(var i=s;i<e;i++)if(hand[i]>0)return true;return false}
+function getTotal(){var t=0;hand.forEach(function(c){t+=c});return t}
+function switchTab(name){
+    document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});
+    document.querySelectorAll('.tab-content').forEach(function(c){c.classList.remove('active')});
+    var names=['advice','ting','defense','remain','discard'];
+    var btns=document.querySelectorAll('.tab-btn');
+    for(var i=0;i<names.length;i++){if(names[i]===name){btns[i].classList.add('active');break}}
+    var el=document.getElementById('tab'+name.charAt(0).toUpperCase()+name.slice(1));
+    if(el)el.classList.add('active');updateAllPanels();
+}
+function updateAllPanels(){updateAdvice();updateTing();updateDefense();updateRemain();updateDiscard()}
+
+function updateAdvice(){
+    var el=document.getElementById('tabAdvice'),total=getTotal();
+    if(!total){el.innerHTML='<span style="color:var(--text3)">设置手牌后自动分析</span>';return}
+    var xt=calcXT(hand);
+    if(xt===-1){el.innerHTML='<div style="text-align:center;padding:20px"><div style="font-size:2rem;margin-bottom:8px">🎉</div><div style="color:var(--gold);font-size:1.2rem;font-weight:800">可以胡牌！</div></div>';return}
+    var sugs=genSugs();
+    if(!sugs.length){el.innerHTML='<span style="color:var(--text3)">无法生成建议</span>';return}
+    var best=sugs[0];
+    var html='<div class="best-card"><div class="best-label">🎯 最佳出牌</div>';
+    html+='<div class="best-tile" style="color:'+tileColor(best.idx)+'">'+getTileName(best.idx)+'</div>';
+    html+='<div class="reasons">';
+    html+='<span class="rtag good">进张'+best.jz+'张</span>';
+    html+='<span class="rtag info">向听'+best.xt+'</span>';
+    if(best.idx===0||best.idx===9||best.idx===18)html+='<span class="rtag warn">🐔鸡牌</span>';
+    if(best.safety>=70)html+='<span class="rtag good">🟢安全</span>';
+    else if(best.safety<40)html+='<span class="rtag bad">🔴危险</span>';
+    if(getRem(best.idx)<=1)html+='<span class="rtag warn">⚠仅剩'+getRem(best.idx)+'张</span>';
+    if(isOppDisc(best.idx))html+='<span class="rtag info">对手打过</span>';
+    html+='</div></div>';
+    html+='<div style="margin-top:8px"><div style="font-size:.7rem;font-weight:700;margin-bottom:4px">📊 进张分析</div>';
+    var maxJZ=best.jz||1;
+    sugs.slice(0,6).forEach(function(s){
+        var pct=Math.round(s.jz/maxJZ*100),cls=pct>=70?'high':pct>=40?'mid':'low';
+        html+='<div class="prob-row"><span class="prob-name" style="color:'+tileColor(s.idx)+'">'+getTileName(s.idx)+'</span>';
+        html+='<div class="prob-bar"><div class="prob-fill '+cls+'" style="width:'+pct+'%">'+s.jz+'张</div></div></div>';
+    });
+    html+='</div>';
+    if(sugs.length>1){
+        html+='<div style="margin-top:8px">';
+        sugs.slice(1,5).forEach(function(s,i){
+            html+='<div class="alt-item"><span class="alt-rank">'+(i+2)+'</span>';
+            html+='<span class="alt-name" style="color:'+tileColor(s.idx)+'">'+getTileName(s.idx)+'</span>';
+            html+='<span class="alt-detail">进张'+s.jz+' | 向听'+s.xt+'</span>';
+            html+='<div class="alt-badges">';
+            if(s.safety>=70)html+='<span class="rtag good">安全</span>';
+            else if(s.safety<40)html+='<span class="rtag bad">危险</span>';
+            if(s.idx===0||s.idx===9||s.idx===18)html+='<span class="rtag warn">🐔</span>';
+            html+='</div></div>';
+        });
+        html+='</div>';
+    }
+    if(phase==='late'){
+        var dangers=sugs.filter(function(s){return s.safety<40&&s.jz<2});
+        if(dangers.length)html+='<div class="warn-box">⚠️ 别打'+dangers.slice(0,2).map(function(s){return getTileName(s.idx)}).join('、')+'！后期点炮风险极高</div>';
+    }
+    if(!thrownChick){
+        var chickInHand=[0,9,18].filter(function(i){return hand[i]>0});
+        if(chickInHand.length&&phase!=='late')html+='<div class="chicken-box">🐔 一筒/一条/一万是鸡牌，尽量保留到有人抛骰定鸡后再决定是否打</div>';
+    }
+    el.innerHTML=html;
+}
+function genSugs(){
+    var total=getTotal();if(!total)return[];
+    var sugs=[];
+    for(var i=0;i<27;i++){
+        if(!hand[i])continue;
+        hand[i]--;var newXT=calcXT(hand),newJZ=countJZ(hand,newXT);hand[i]++;
+        var safety=calcSafety(i);
+        var chickenVal=(i===0||i===9||i===18)?2.5:0;
+        var score=(10-newXT)*3+newJZ*.8+safety*.15+chickenVal*.5;
+        if((i===0||i===9||i===18)&&phase==='early')score-=1;
+        sugs.push({idx:i,xt:newXT,jz:newJZ,safety:safety,score:score});
+    }
+    sugs.sort(function(a,b){return b.score-a.score});return sugs;
+}
+function calcSafety(idx){
+    var safety=50,num=idx%9,remain=getRem(idx);
+    safety+=remain*5;
+    if(num===0||num===8)safety+=10;
+    if(num===0)safety+=5;
+    if(isOppDisc(idx))safety+=15;
+    if(isOppDisc(idx-1)||isOppDisc(idx+1))safety+=8;
+    var sb=Math.floor(idx/9)*9;
+    if(num>0&&isOppDisc(sb+num))safety+=5;
+    if(phase==='late'){if(remain>=3&&num>=2&&num<=6)safety-=15}
+    else if(phase==='early')safety+=5;
+    return Math.max(0,Math.min(100,safety));
+}
+function isOppDisc(idx){return opponentDiscards.some(function(o){return o.indexOf(idx)>=0})}
+
+function updateTing(){
+    var el=document.getElementById('tabTing'),xt=calcXT(hand);
+    if(xt!==0){el.innerHTML='<span style="color:var(--text3)">当前向听数: '+xt+'，听牌后显示详情</span>';return}
+    var list=findTing(hand);
+    if(!list.length){el.innerHTML='<span style="color:var(--text3)">无听牌</span>';return}
+    var html='<div style="font-size:.85rem;font-weight:800;color:var(--gold);margin-bottom:8px">🎯 听牌！</div>';
+    list.sort(function(a,b){return getRem(b)-getRem(a)});
+    list.forEach(function(t){
+        var rem=getRem(t),val=5+(rem/4)*5;
+        if(t===0||t===9||t===18)val+=3;val=Math.round(val);
+        var cls=val>=7?'high':val>=4?'mid':'low';
+        html+='<div class="prob-row"><span class="prob-name" style="color:'+tileColor(t)+'">'+getTileName(t)+'</span>';
+        html+='<div class="prob-bar"><div class="prob-fill '+cls+'" style="width:'+Math.max(10,rem*20)+'%">'+rem+'张('+val+'分)</div></div></div>';
+    });
+    el.innerHTML=html;
+}
+function updateDefense(){
+    var el=document.getElementById('tabDefense');
+    if(phase!=='late'&&phase!=='mid'){el.innerHTML='<span style="color:var(--text3);font-size:.7rem">中后期自动激活</span>';return}
+    var items=[];
+    for(var i=0;i<27;i++){if(hand[i])items.push({idx:i,safety:calcSafety(i)})}
+    items.sort(function(a,b){return b.safety-a.safety});
+    var html='';
+    items.slice(0,12).forEach(function(t){
+        var cls=t.safety>=70?'safe':t.safety>=40?'mid':'danger';
+        var sn=t.idx<9?'万':t.idx<18?'条':'筒';
+        html+='<div class="def-item '+cls+'">'+TN[t.idx%9]+sn+' <span style="font-size:.6rem">'+t.safety+'</span></div>';
+    });
+    el.innerHTML=html||'<span style="color:var(--text3)">无手牌</span>';
+}
+function updateRemain(){
+    var el=document.getElementById('tabRemain'),html='';
+    [['万',0,9,'wan'],['条',9,18,'tiao'],['筒',18,27,'tong']].forEach(function(c){
+        html+='<div class="rem-row"><span class="rem-label" style="color:var(--'+c[3]+')">'+c[0]+'</span>';
+        for(var i=c[1];i<c[2];i++){
+            var rem=getRem(i),ih=hand[i]>0?' inhand':'',cc=rem===0?'c0':rem===1?'c1':rem===2?'c2':'';
+            html+='<div class="rem-cell '+c[3]+cc+ih+'"><span class="rn" style="color:var(--'+c[3]+')">'+TN[i%9]+'</span><span class="rc">'+rem+'</span></div>';
+        }
+        html+='</div>';
+    });
+    el.innerHTML=html;
+}
+function updateDiscard(){
+    var el=document.getElementById('tabDiscard'),html='<div style="font-size:.7rem;font-weight:700;margin-bottom:4px">全场弃牌</div><div>';
+    if(!allDiscards.length)html+='<span style="color:var(--text3);font-size:.7rem">暂无</span>';
+    else allDiscards.forEach(function(d){var suit=d.idx<9?'wan':d.idx<18?'tiao':'tong',hl=d.who==='me'?' hl':'';html+='<div class="disc-tile '+suit+hl+'">'+TN[d.idx%9]+'</div>'});
+    html+='</div>';
+    [['下家',0],['对家',1],['上家',2]].forEach(function(o){
+        html+='<div class="opp-row"><div class="opp-label">'+o[0]+'</div><div>';
+        opponentDiscards[o[1]].forEach(function(idx){var suit=idx<9?'wan':idx<18?'tiao':'tong';html+='<div class="disc-tile '+suit+'">'+TN[idx%9]+'</div>'});
+        if(!opponentDiscards[o[1]].length)html+='<span style="color:var(--text3);font-size:.6rem">无</span>';
+        html+='</div></div>';
+    });
+    el.innerHTML=html;
+}
+function getTileName(idx){return TN[idx%9]+(idx<9?'万':idx<18?'条':'筒')}
+function tileColor(idx){return idx<9?'var(--red)':idx<18?'var(--green)':'var(--blue)'}
+function getRem(idx){var c=4-hand[idx];allDiscards.forEach(function(d){if(d.idx===idx)c--});return Math.max(0,c)}
+function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},1800)}
+
+function calcXT(tiles){
+    var pairs=0;for(var i=0;i<27;i++)pairs+=Math.floor(tiles[i]/2);
+    var qdXT=6-pairs;if(qdXT<0)qdXT=10;
+    var bestM=0,bestT=0;
+    function analyze(arr,idx,m,t,head,depth){
+        if(depth>100)return;
+        while(idx<27&&!arr[idx])idx++;
+        if(idx>=27){if(m+Math.floor((13-m*3-t)/2)>=4||(m===4&&t===0)){if(m>bestM||(m===bestM&&t>bestT)){bestM=m;bestT=t}}return}
+        if(t>4-m)return;
+        var si=idx%9,ss=si<=6;
+        if(arr[idx]>=3){arr[idx]-=3;analyze(arr,idx,m+1,t,head,depth+1);arr[idx]+=3}
+        if(ss&&arr[idx]>=1&&arr[idx+1]>=1&&arr[idx+2]>=1){arr[idx]--;arr[idx+1]--;arr[idx+2]--;analyze(arr,idx,m+1,t,head,depth+1);arr[idx]++;arr[idx+1]++;arr[idx+2]++}
+        if(arr[idx]>=2&&!head){arr[idx]-=2;analyze(arr,idx,m,t,true,depth+1);arr[idx]+=2}
+        if(ss&&arr[idx]>=1&&arr[idx+1]>=1&&t<4-m){arr[idx]--;arr[idx+1]--;analyze(arr,idx,m,t+1,head,depth+1);arr[idx]++;arr[idx+1]++}
+        if(ss&&arr[idx]>=1&&arr[idx+2]>=1&&t<4-m){arr[idx]--;arr[idx+2]--;analyze(arr,idx,m,t+1,head,depth+1);arr[idx]++;arr[idx+2]++}
+        var sv=arr[idx];arr[idx]=0;analyze(arr,idx,m,t,head,depth+1);arr[idx]=sv;
+    }
+    analyze(tiles.slice(),0,0,0,false,0);
+    var nXT=8-2*bestM-bestT;
+    return Math.min(qdXT,nXT);
+}
+function findTing(tiles){
+    var list=[];
+    for(var i=0;i<27;i++){if(tiles[i]>=4)continue;var test=tiles.slice();test[i]++;if(calcXT(test)===-1)list.push(i)}
+    return list;
+}
+function countJZ(tiles,curXT){
+    var count=0;
+    for(var i=0;i<27;i++){if(tiles[i]>=4)continue;var test=tiles.slice();test[i]++;if(calcXT(test)<curXT)count+=getRem(i)}
+    return count;
+}
+window.addEventListener('load',function(){tryAutoConnect();updateDisplay()});
+</script>
+</body>
+</html>
