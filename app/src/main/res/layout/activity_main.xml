@@ -26,7 +26,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="内置捉鸡麻将提示器v10，一键自动识别"
+        android:text="内置捉鸡麻将提示器v10"
         android:textSize="13sp"
         android:textColor="#94a3b8"
         android:layout_marginTop="6dp" />
@@ -49,6 +49,17 @@
         android:textColor="#ffffff"
         android:backgroundTint="#22c55e"
         android:layout_marginTop="24dp" />
+
+    <Button
+        android:id="@+id/btnHelper"
+        android:layout_width="240dp"
+        android:layout_height="64dp"
+        android:text="🀄 打开提示器"
+        android:textSize="20sp"
+        android:textColor="#ffffff"
+        android:backgroundTint="#8b5cf6"
+        android:layout_marginTop="16dp"
+        android:visibility="gone" />
 
     <LinearLayout
         android:layout_width="wrap_content"
@@ -88,7 +99,7 @@
         android:id="@+id/tvHint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="点击上方按钮启动截屏服务"
+        android:text="先点上方按钮启动截屏"
         android:textSize="13sp"
         android:textColor="#666666"
         android:layout_marginTop="8dp"
@@ -98,7 +109,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="使用步骤：\n1. 点「开始截屏」→ 允许录屏权限\n2. 用Edge浏览器打开上面的地址\n3. 提示器自动连接截屏App\n4. 切到微乐麻将正常玩\n5. 提示器全自动识别，全程零操作"
+        android:text="使用步骤：\n1. 点「开始截屏」→ 允许录屏权限\n2. 点「打开提示器」→ 自动识别\n3. 切到微乐麻将正常玩\n4. 提示器全自动运行，全程零操作"
         android:textSize="13sp"
         android:textColor="#64748b"
         android:layout_marginTop="20dp"

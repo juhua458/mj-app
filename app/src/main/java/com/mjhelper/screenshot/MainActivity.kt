@@ -18,6 +18,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvAddress: TextView
     private lateinit var tvHint: TextView
     private lateinit var btnStart: Button
+    private lateinit var btnHelper: Button
     private lateinit var swAutoStart: Switch
     private var isRunning = false
 
@@ -51,6 +52,7 @@ class MainActivity : AppCompatActivity() {
         tvAddress = findViewById(R.id.tvAddress)
         tvHint = findViewById(R.id.tvHint)
         btnStart = findViewById(R.id.btnStart)
+        btnHelper = findViewById(R.id.btnHelper)
         swAutoStart = findViewById(R.id.swAutoStart)
 
         isRunning = ScreenCaptureService.isRunning
@@ -60,6 +62,11 @@ class MainActivity : AppCompatActivity() {
             if (isRunning) stopServices() else requestScreenCapture()
         }
 
+        btnHelper.setOnClickListener {
+            val intent = Intent(this, HelperActivity::class.java)
+            startActivity(intent)
+        }
+
         swAutoStart.setOnCheckedChangeListener { _, isChecked ->
             getSharedPreferences("mj_helper", Context.MODE_PRIVATE)
                 .edit().putBoolean("auto_start", isChecked).apply()
@@ -67,7 +74,7 @@ class MainActivity : AppCompatActivity() {
         swAutoStart.isChecked = getSharedPreferences("mj_helper", Context.MODE_PRIVATE)
             .getBoolean("auto_start", false)
 
-        val addr = "http://${getLocalIpAddress()}:8666"
+        val addr = "http://127.0.0.1:8666"
         tvAddress.text = addr
     }
 
@@ -88,29 +95,17 @@ class MainActivity : AppCompatActivity() {
             tvStatus.text = "✅ 运行中"
             tvStatus.setTextColor(getColor(android.R.color.holo_green_dark))
             btnStart.text = "⏹ 停止截屏"
-            tvHint.text = "👉 用Edge浏览器打开上面的地址\n即可使用麻将提示器"
+            btnHelper.visibility = android.view.View.VISIBLE
+            tvHint.text = "👇 点「打开提示器」开始使用"
             tvHint.setTextColor(getColor(android.R.color.holo_orange_dark))
         } else {
             tvStatus.text = "⏸ 未启动"
             tvStatus.setTextColor(getColor(android.R.color.darker_gray))
             btnStart.text = "🚀 开始截屏"
-            tvHint.text = "点击上方按钮启动截屏服务"
+            btnHelper.visibility = android.view.View.GONE
+            tvHint.text = "先点上方按钮启动截屏"
             tvHint.setTextColor(getColor(android.R.color.darker_gray))
         }
-    }
-
-    private fun getLocalIpAddress(): String {
-        try {
-            val en = java.net.NetworkInterface.getNetworkInterfaces()
-            while (en.hasMoreElements()) {
-                val addrs = en.nextElement().inetAddresses
-                while (addrs.hasMoreElements()) {
-                    val a = addrs.nextElement()
-                    if (!a.isLoopbackAddress && a is java.net.Inet4Address) return a.hostAddress ?: "127.0.0.1"
-                }
-            }
-        } catch (_: Exception) {}
-        return "127.0.0.1"
     }
 
     override fun onResume() {
