@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0f172a"
+    android:padding="24dp"
+    android:gravity="center_horizontal">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🀄"
+        android:textSize="64sp"
+        android:layout_marginTop="40dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="麻将截屏助手"
+        android:textSize="24sp"
+        android:textColor="#f1f5f9"
+        android:textStyle="bold"
+        android:layout_marginTop="12dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="配合捉鸡麻将提示器v9，自动截屏识别"
+        android:textSize="13sp"
+        android:textColor="#94a3b8"
+        android:layout_marginTop="6dp" />
+
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="⏸ 未启动"
+        android:textSize="18sp"
+        android:textColor="#666666"
+        android:layout_marginTop="40dp" />
+
+    <Button
+        android:id="@+id/btnStart"
+        android:layout_width="240dp"
+        android:layout_height="64dp"
+        android:text="🚀 开始截屏"
+        android:textSize="20sp"
+        android:textColor="#ffffff"
+        android:backgroundTint="#22c55e"
+        android:layout_marginTop="24dp" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="24dp"
+        android:gravity="center_vertical">
+
+        <Switch
+            android:id="@+id/swAutoStart"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:thumbTint="#f59e0b"
+            android:trackTint="#334155" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="开机自动启动"
+            android:textSize="14sp"
+            android:textColor="#94a3b8"
+            android:layout_marginStart="8dp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvAddress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="http://127.0.0.1:8666"
+        android:textSize="14sp"
+        android:textColor="#06b6d4"
+        android:layout_marginTop="30dp"
+        android:fontFamily="monospace" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="使用说明：\n1. 点「开始截屏」→ 允许录屏权限\n2. 切到浏览器打开捉鸡麻将提示器\n3. 选「🔄自动截屏」模式\n4. 回到麻将App正常玩\n5. 浏览器自动识别，全程零操作"
+        android:textSize="13sp"
+        android:textColor="#64748b"
+        android:layout_marginTop="30dp"
+        android:lineSpacingExtra="4dp" />
+
+</LinearLayout>

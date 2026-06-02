@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MjScreenshot" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+        <item name="colorPrimary">#7c3aed</item>
+        <item name="colorPrimaryVariant">#6d28d9</item>
+        <item name="colorOnPrimary">#ffffff</item>
+        <item name="android:statusBarColor">#0f172a</item>
+    </style>
+</resources>
