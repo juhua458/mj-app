@@ -65,9 +65,13 @@ class HttpServerService : Service() {
                             }
                         }
                         session.uri == "/api/status" -> {
-                            val json = """{"running":${ScreenCaptureService.isRunning},"hasScreenshot":${ScreenCaptureService.latestScreenshot != null}}"""
+                            val capture = ScreenCaptureService
+                            val timeSinceLast = if (capture.lastCaptureTime > 0) 
+                                (System.currentTimeMillis() - capture.lastCaptureTime) / 1000 else -1
+                            val json = """{"running":${capture.isRunning},"hasScreenshot":${capture.latestScreenshot != null},"captureCount":${capture.captureCount},"timeSinceLast":${timeSinceLast},"error":"${capture.lastError}"}"""
                             newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
                                 addHeader("Access-Control-Allow-Origin", "*")
+                                addHeader("Cache-Control", "no-cache, no-store")
                             }
                         }
                         else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "not found")

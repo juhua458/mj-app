@@ -29,6 +29,12 @@ class ScreenCaptureService : Service() {
         var isRunning = false
         var latestScreenshot: ByteArray? = null
             private set
+        var captureCount: Int = 0
+            private set
+        var lastCaptureTime: Long = 0
+            private set
+        var lastError: String = ""
+            private set
         private const val CHANNEL_ID = "mj_screenshot"
         private const val NOTIFICATION_ID = 1
     }
@@ -42,6 +48,7 @@ class ScreenCaptureService : Service() {
     private var screenWidth = 540
     private var screenHeight = 1200
     private var screenDensity = 160
+    private var consecutiveFails = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -54,6 +61,11 @@ class ScreenCaptureService : Service() {
         if (intent?.action == "STOP") {
             stopSelf()
             return START_NOT_STICKY
+        }
+
+        // 如果已经在运行，不重复启动
+        if (isRunning && mediaProjection != null) {
+            return START_STICKY
         }
 
         resultCode = intent?.getIntExtra("RESULT_CODE", 0) ?: 0
@@ -69,12 +81,10 @@ class ScreenCaptureService : Service() {
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         wm.defaultDisplay.getMetrics(metrics)
-        // Use 3/4 resolution for better recognition quality
         screenWidth = metrics.widthPixels * 3 / 4
         screenHeight = metrics.heightPixels * 3 / 4
         screenDensity = metrics.densityDpi * 3 / 4
 
-        // Android 14+ 必须指定 foregroundServiceType
         val notification = createNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
@@ -95,6 +105,13 @@ class ScreenCaptureService : Service() {
         try {
             val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             mediaProjection = projectionManager.getMediaProjection(resultCode, resultData!!)
+            
+            mediaProjection?.registerCallback(object : MediaProjection.Callback() {
+                override fun onStop() {
+                    lastError = "MediaProjection被停止"
+                    isRunning = false
+                }
+            }, handler)
 
             imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
 
@@ -106,16 +123,20 @@ class ScreenCaptureService : Service() {
                 null, null
             )
 
-            // 每1秒截一次屏
+            lastError = ""
+            captureCount = 0
+
+            // 每800ms截一次屏
             handler.postDelayed(object : Runnable {
                 override fun run() {
                     if (isRunning) {
                         captureScreen()
-                        handler.postDelayed(this, 1000)
+                        handler.postDelayed(this, 800)
                     }
                 }
-            }, 1000)
+            }, 500)
         } catch (e: Exception) {
+            lastError = "启动失败: ${e.message}"
             e.printStackTrace()
             isRunning = false
             stopSelf()
@@ -139,14 +160,24 @@ class ScreenCaptureService : Service() {
                 bitmap.copyPixelsFromBuffer(buffer)
                 image.close()
 
-                // 传完整截图，由提示器自行裁剪识别
                 val stream = ByteArrayOutputStream()
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 70, stream)
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 75, stream)
                 latestScreenshot = stream.toByteArray()
                 bitmap.recycle()
+                
+                captureCount++
+                lastCaptureTime = System.currentTimeMillis()
+                consecutiveFails = 0
+                lastError = ""
+            } else {
+                consecutiveFails++
+                if (consecutiveFails > 10) {
+                    lastError = "连续${consecutiveFails}次未获取到帧"
+                }
             }
         } catch (e: Exception) {
-            // 静默处理，下次继续
+            consecutiveFails++
+            lastError = "截屏错误: ${e.message}"
         }
     }
 

@@ -3,100 +3,121 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>🀄 捉鸡麻将提示器 v12</title>
+<title>🀄 捉鸡麻将提示器 v13</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{--bg:#0a0e1a;--bg2:#131825;--card:#1c2333;--text:#e8edf5;--text2:#8b95a8;--red:#e54545;--green:#2ebd5e;--blue:#4a8eff;--gold:#f0a030;--purple:#9b5dff}
 html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);font-size:13px}
 .app{display:flex;flex-direction:column;height:100vh;width:100vw;overflow-y:auto;-webkit-overflow-scrolling:touch}
-
-/* 调试面板放最顶部，分屏也能看到 */
-.debug{padding:4px 8px;background:#111;font-size:.55rem;color:#0f0;max-height:120px;overflow-y:auto;font-family:monospace;flex-shrink:0;white-space:pre-wrap;word-break:break-all;border-bottom:2px solid #333}
+.debug{padding:3px 6px;background:#111;font-size:.5rem;color:#0f0;max-height:80px;overflow-y:auto;font-family:monospace;flex-shrink:0;white-space:pre-wrap;word-break:break-all;border-bottom:2px solid #333}
 .debug:empty{display:none}
-
-.top-bar{padding:6px 10px;background:linear-gradient(135deg,#5b21b6,#7c3aed);display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
-.top-bar h1{font-size:.75rem;font-weight:700}
-.status-bar{display:flex;gap:4px;padding:4px 10px;background:var(--bg2);flex-wrap:wrap;flex-shrink:0}
-.chip{padding:2px 6px;border-radius:10px;font-size:.6rem;font-weight:600}
+.top-bar{padding:5px 10px;background:linear-gradient(135deg,#5b21b6,#7c3aed);display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.top-bar h1{font-size:.7rem;font-weight:700}
+.status-bar{display:flex;gap:3px;padding:3px 8px;background:var(--bg2);flex-wrap:wrap;flex-shrink:0}
+.chip{padding:1px 5px;border-radius:8px;font-size:.55rem;font-weight:600}
 .chip.early{background:var(--green);color:#000}.chip.mid{background:var(--gold);color:#000}.chip.late{background:var(--red);color:#fff}
 .chip.cnt{background:var(--purple);color:#fff}.chip.rem{background:var(--card);color:var(--text)}
-
-.auto-section{padding:6px 10px;background:var(--bg2);flex-shrink:0}
-.auto-status{display:flex;align-items:center;gap:4px;margin-bottom:4px;font-size:.65rem}
-.auto-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.auto-section{padding:4px 8px;background:var(--bg2);flex-shrink:0}
+.auto-status{display:flex;align-items:center;gap:4px;font-size:.6rem}
+.auto-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .auto-dot.on{background:var(--green);animation:blink 1s infinite}
 .auto-dot.off{background:var(--red)}.auto-dot.try{background:var(--gold);animation:blink .5s infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-.auto-btns{display:flex;gap:4px}
-.abtn{flex:1;padding:8px;border:none;border-radius:6px;font-size:.75rem;font-weight:700;cursor:pointer;color:#fff}
+.auto-btns{display:flex;gap:3px;margin-top:3px}
+.abtn{flex:1;padding:6px;border:none;border-radius:5px;font-size:.65rem;font-weight:700;cursor:pointer;color:#fff}
 .abtn.start{background:linear-gradient(135deg,var(--green),#1a9c4a)}
 .abtn.stop{background:linear-gradient(135deg,var(--red),#c03030)}
 .abtn.snap{background:linear-gradient(135deg,var(--blue),#2a6ed4)}
 .abtn:active{transform:scale(.97)}
-
-/* 调试截图预览 - 小化 */
-.preview{width:100%;height:50px;background:#000;border-radius:4px;overflow:hidden;margin-top:4px;position:relative}
+.preview{width:100%;height:36px;background:#000;border-radius:3px;overflow:hidden;margin-top:3px;position:relative}
 .preview canvas{width:100%;height:100%;object-fit:contain;display:none}
-.preview .no-src{display:flex;align-items:center;justify-content:center;height:100%;color:#555;font-size:.6rem}
+.preview .no-src{display:flex;align-items:center;justify-content:center;height:100%;color:#555;font-size:.55rem}
 
-/* 识别结果行 */
-.ocr-row{display:flex;gap:2px;flex-wrap:wrap;padding:4px 10px;background:var(--bg2);min-height:24px;flex-shrink:0}
-.ocr-chip{padding:2px 5px;border-radius:3px;font-size:.6rem;font-weight:700;color:#fff}
+/* 碰杠胡警报区 */
+.alert-bar{padding:4px 8px;flex-shrink:0;display:none}
+.alert-bar.show{display:block}
+.alert-bar.hu{background:rgba(229,69,69,.2);border:1px solid var(--red);border-radius:4px}
+.alert-bar.peng{background:rgba(240,160,48,.2);border:1px solid var(--gold);border-radius:4px}
+.alert-bar.gang{background:rgba(74,142,255,.2);border:1px solid var(--blue);border-radius:4px}
+.alert-text{font-size:.7rem;font-weight:800;text-align:center}
+.alert-bar.hu .alert-text{color:var(--red)}
+.alert-bar.peng .alert-text{color:var(--gold)}
+.alert-bar.gang .alert-text{color:var(--blue)}
+
+.ocr-row{display:flex;gap:2px;flex-wrap:wrap;padding:3px 8px;background:var(--bg2);min-height:20px;flex-shrink:0}
+.ocr-chip{padding:1px 4px;border-radius:2px;font-size:.55rem;font-weight:700;color:#fff}
 .ocr-chip.wan{background:var(--red)}.ocr-chip.tiao{background:var(--green)}.ocr-chip.tong{background:var(--blue)}.ocr-chip.unk{background:#555}
 
-.hand-area{padding:6px 10px;background:var(--bg2);flex-shrink:0}
-.hand-row{display:flex;gap:2px;flex-wrap:wrap;min-height:36px;padding:3px;background:var(--bg);border-radius:6px}
-.tile{width:28px;height:38px;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:transform .1s;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.hand-area{padding:4px 8px;background:var(--bg2);flex-shrink:0}
+.hand-row{display:flex;gap:2px;flex-wrap:wrap;min-height:32px;padding:2px;background:var(--bg);border-radius:4px}
+.tile{width:26px;height:34px;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:transform .1s;box-shadow:0 1px 2px rgba(0,0,0,.3)}
 .tile.wan{background:linear-gradient(180deg,#fff,#fde8e8)}.tile.tiao{background:linear-gradient(180deg,#fff,#e8fde8)}.tile.tong{background:linear-gradient(180deg,#fff,#e8e8fd)}
-.tile .tn{font-size:12px;font-weight:800;line-height:1}.tile.wan .tn{color:var(--red)}.tile.tiao .tn{color:var(--green)}.tile.tong .tn{color:var(--blue)}
-.tile .ts{font-size:5px;opacity:.6;margin-top:1px}
+.tile .tn{font-size:11px;font-weight:800;line-height:1}.tile.wan .tn{color:var(--red)}.tile.tiao .tn{color:var(--green)}.tile.tong .tn{color:var(--blue)}
+.tile .ts{font-size:4px;opacity:.6;margin-top:1px}
 .tile.sel{border:2px solid var(--gold);box-shadow:0 0 6px rgba(240,160,48,.5);transform:translateY(-2px)}
-.op-row{display:flex;gap:4px;margin-top:4px}
-.op-btn{flex:1;padding:8px;border:none;border-radius:6px;font-size:.75rem;font-weight:800;cursor:pointer;color:#fff}
+.op-row{display:flex;gap:3px;margin-top:3px}
+.op-btn{flex:1;padding:6px;border:none;border-radius:4px;font-size:.65rem;font-weight:800;cursor:pointer;color:#fff}
 .op-btn:active{transform:scale(.97)}
 .op-btn.draw{background:linear-gradient(135deg,var(--green),#1a9c4a)}
 .op-btn.discard{background:linear-gradient(135deg,var(--blue),#2a6ed4)}
 .op-btn:disabled{opacity:.4;cursor:not-allowed}
+.op-btn.peng{background:linear-gradient(135deg,var(--gold),#d09020)}
+.op-btn.gang{background:linear-gradient(135deg,var(--blue),#2060c0)}
 
-.miss-bar{padding:3px 10px;font-size:.6rem;flex-shrink:0}
+.miss-bar{padding:2px 8px;font-size:.55rem;flex-shrink:0}
 .miss-bar.ok{color:var(--green)}.miss-bar.warn{color:var(--gold)}
 
-.strategy{padding:6px 10px;flex-shrink:0}
-.tab-bar{display:flex;gap:3px;margin-bottom:6px;flex-shrink:0}
-.tab-btn{flex:1;padding:5px;border:none;border-radius:4px;font-size:.6rem;font-weight:700;cursor:pointer;background:var(--card);color:var(--text2)}
+/* 对手弃牌区 */
+.discard-section{padding:4px 8px;background:var(--bg2);flex-shrink:0;border-top:1px solid #222}
+.discard-title{font-size:.6rem;color:var(--text2);margin-bottom:3px;display:flex;justify-content:space-between;align-items:center}
+.discard-title span{cursor:pointer;color:var(--blue)}
+.discard-pool{display:flex;gap:1px;flex-wrap:wrap;min-height:18px;padding:2px;background:var(--bg);border-radius:3px}
+.discard-tile{padding:1px 3px;border-radius:2px;font-size:.5rem;font-weight:700;color:#fff;cursor:pointer}
+.discard-tile.wan{background:#b03030}.discard-tile.tiao{background:#209030}.discard-tile.tong{background:#2060c0}
+.discard-add{display:flex;gap:2px;margin-top:3px;flex-wrap:wrap}
+.discard-add select{background:var(--card);color:var(--text);border:1px solid #444;border-radius:3px;font-size:.55rem;padding:1px 2px;max-width:50px}
+.discard-add button{padding:2px 6px;border:none;border-radius:3px;font-size:.55rem;font-weight:700;cursor:pointer;color:#fff;background:var(--purple)}
+
+/* 对手推测 */
+.predict-section{padding:4px 8px;background:var(--bg2);flex-shrink:0;border-top:1px solid #222}
+.predict-title{font-size:.6rem;color:var(--gold);margin-bottom:3px}
+.predict-row{display:flex;gap:1px;flex-wrap:wrap}
+.predict-tile{padding:1px 3px;border-radius:2px;font-size:.5rem;font-weight:600}
+.predict-tile.danger{background:rgba(229,69,69,.2);color:var(--red)}
+.predict-tile.safe{background:rgba(46,189,94,.2);color:var(--green)}
+.predict-tile.mid{background:rgba(224,168,32,.2);color:var(--gold)}
+
+.strategy{padding:4px 8px;flex-shrink:0}
+.tab-bar{display:flex;gap:2px;margin-bottom:4px;flex-shrink:0}
+.tab-btn{flex:1;padding:4px;border:none;border-radius:3px;font-size:.55rem;font-weight:700;cursor:pointer;background:var(--card);color:var(--text2)}
 .tab-btn.active{background:var(--gold);color:#000}
 .tab-content{display:none}.tab-content.active{display:block}
-.best-card{background:var(--card);border-radius:8px;padding:8px;margin-bottom:6px;border:1px solid rgba(240,160,48,.3)}
-.best-label{font-size:.6rem;color:var(--gold);margin-bottom:2px}
-.best-tile{font-size:1.2rem;font-weight:800;text-align:center;margin:2px 0}
-.reasons{display:flex;gap:3px;flex-wrap:wrap;margin-top:4px}
-.rtag{padding:1px 5px;border-radius:3px;font-size:.55rem;font-weight:600}
+.best-card{background:var(--card);border-radius:6px;padding:6px;margin-bottom:4px;border:1px solid rgba(240,160,48,.3)}
+.best-label{font-size:.55rem;color:var(--gold);margin-bottom:2px}
+.best-tile{font-size:1rem;font-weight:800;text-align:center;margin:2px 0}
+.reasons{display:flex;gap:2px;flex-wrap:wrap;margin-top:3px}
+.rtag{padding:1px 4px;border-radius:2px;font-size:.5rem;font-weight:600}
 .rtag.good{background:rgba(46,189,94,.2);color:var(--green)}.rtag.bad{background:rgba(229,69,69,.2);color:var(--red)}.rtag.warn{background:rgba(224,168,32,.2);color:var(--gold)}.rtag.info{background:rgba(74,142,255,.2);color:var(--blue)}
-.prob-row{display:flex;align-items:center;gap:4px;margin:2px 0}
-.prob-name{width:30px;font-size:.6rem;font-weight:700;flex-shrink:0}
-.prob-bar{flex:1;height:14px;background:var(--bg);border-radius:7px;overflow:hidden}
-.prob-fill{height:100%;border-radius:7px;font-size:.5rem;font-weight:600;color:#fff;display:flex;align-items:center;justify-content:flex-end;padding-right:3px;min-width:20px}
+.prob-row{display:flex;align-items:center;gap:3px;margin:1px 0}
+.prob-name{width:26px;font-size:.55rem;font-weight:700;flex-shrink:0}
+.prob-bar{flex:1;height:12px;background:var(--bg);border-radius:6px;overflow:hidden}
+.prob-fill{height:100%;border-radius:6px;font-size:.45rem;font-weight:600;color:#fff;display:flex;align-items:center;justify-content:flex-end;padding-right:2px;min-width:16px}
 .prob-fill.high{background:var(--green)}.prob-fill.mid{background:var(--gold)}.prob-fill.low{background:var(--red)}
-.alt-item{display:flex;align-items:center;gap:4px;padding:3px 0;font-size:.6rem;border-bottom:1px solid rgba(255,255,255,.05)}
-.def-item{display:inline-flex;align-items:center;gap:2px;padding:2px 6px;border-radius:4px;margin:1px;font-size:.6rem;font-weight:600}
+.def-item{display:inline-flex;align-items:center;gap:2px;padding:1px 4px;border-radius:3px;margin:1px;font-size:.55rem;font-weight:600}
 .def-item.safe{background:rgba(46,189,94,.15);color:var(--green)}.def-item.mid{background:rgba(224,168,32,.15);color:var(--gold)}.def-item.danger{background:rgba(229,69,69,.15);color:var(--red)}
-.rem-row{display:flex;align-items:center;gap:1px;margin:2px 0}
-.rem-label{width:16px;font-size:.55rem;font-weight:700;flex-shrink:0}
-.rem-cell{width:24px;height:24px;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.5rem;font-weight:600;background:var(--card)}
+.rem-row{display:flex;align-items:center;gap:1px;margin:1px 0}
+.rem-label{width:14px;font-size:.5rem;font-weight:700;flex-shrink:0}
+.rem-cell{width:20px;height:20px;border-radius:2px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.45rem;font-weight:600;background:var(--card)}
 .rem-cell.c0{background:rgba(229,69,69,.2)}.rem-cell.c1{background:rgba(224,168,32,.2)}.rem-cell.c2{background:rgba(74,142,255,.15)}
-.rem-cell .rn{line-height:1}.rem-cell .rc{font-size:.45rem;color:var(--text2)}
-.warn-box{background:rgba(229,69,69,.1);border:1px solid rgba(229,69,69,.3);border-radius:4px;padding:4px 6px;font-size:.6rem;color:var(--red);margin-top:4px}
-.chicken-box{background:rgba(240,160,48,.1);border:1px solid rgba(240,160,48,.3);border-radius:4px;padding:4px 6px;font-size:.6rem;color:var(--gold);margin-top:4px}
-.toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.85);color:#fff;padding:6px 14px;border-radius:6px;font-size:.75rem;z-index:999;opacity:0;transition:opacity .3s}
+.rem-cell .rn{line-height:1}.rem-cell .rc{font-size:.4rem;color:var(--text2)}
+.toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.85);color:#fff;padding:6px 14px;border-radius:6px;font-size:.7rem;z-index:999;opacity:0;transition:opacity .3s}
 .toast.show{opacity:1}
 </style>
 </head>
 <body>
 <div class="app">
-<!-- 调试面板放最顶部，分屏也能看到 -->
-<div id="debugPanel" class="debug" style="display:block"></div>
-
-<div class="top-bar"><h1>🀄 捉鸡麻将提示器 v12</h1><div></div></div>
+<div id="debugPanel" class="debug"></div>
+<div class="top-bar"><h1>🀄 捉鸡麻将 v13</h1><div></div></div>
 <div class="status-bar">
 <span id="phaseBadge" class="chip early">前期</span>
 <span id="tileCount" class="chip cnt">0张</span>
@@ -117,15 +138,36 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 <div id="noSrc" class="no-src">等待截图...</div>
 </div>
 </div>
+<!-- 碰杠胡警报 -->
+<div id="alertHu" class="alert-bar hu"><div class="alert-text">🎉 可以胡牌！</div></div>
+<div id="alertPeng" class="alert-bar peng"><div class="alert-text" id="pengText">可以碰！</div></div>
+<div id="alertGang" class="alert-bar gang"><div class="alert-text" id="gangText">可以杠！</div></div>
 <div class="ocr-row" id="ocrRow"></div>
 <div class="hand-area">
 <div class="hand-row" id="handRow"></div>
 <div class="op-row">
-<button id="btnDiscard" class="op-btn discard" onclick="confirmDiscard()" disabled>出牌</button>
+<button id="btnDiscard" class="op-btn discard" onclick="confirmDiscard()" disabled>打出</button>
 <button class="op-btn draw" onclick="newRound()">🔄 新局</button>
+<button class="op-btn peng" onclick="doPeng()" id="btnPeng" style="display:none">碰</button>
+<button class="op-btn gang" onclick="doGang()" id="btnGang" style="display:none">杠</button>
 </div>
 </div>
 <div id="missBar" class="miss-bar"></div>
+<!-- 对手弃牌记录 -->
+<div class="discard-section">
+<div class="discard-title">📤 已出牌池 <span onclick="clearDiscards()">清空</span></div>
+<div class="discard-pool" id="discardPool"></div>
+<div class="discard-add">
+<select id="discardSuit"><option value="0">万</option><option value="9">条</option><option value="18">筒</option></select>
+<select id="discardNum"><option value="0">一</option><option value="1">二</option><option value="2">三</option><option value="3">四</option><option value="4">五</option><option value="5">六</option><option value="6">七</option><option value="7">八</option><option value="8">九</option></select>
+<button onclick="addDiscard()">+出牌</button>
+</div>
+</div>
+<!-- 对手推测 -->
+<div class="predict-section" id="predictSection" style="display:none">
+<div class="predict-title">🎯 危险牌推测（对手可能要的牌）</div>
+<div class="predict-row" id="predictRow"></div>
+</div>
 <div class="strategy">
 <div class="tab-bar">
 <button class="tab-btn active" onclick="switchTab('advice')">建议</button>
@@ -148,9 +190,12 @@ var hand=new Array(27).fill(0),selectedTile=-1;
 var totalDiscarded=0,phase='early',thrownChick=false;
 var isAuto=false,autoTimer=null,frameResults=[];
 var debugLines=[];
+var discards=new Array(27).fill(0); // 已出牌池（含对手出牌）
+var handSize=0; // 当前手牌总数
 
 function log(msg){
-    var ts=new Date().toLocaleTimeString().substr(3,5);
+    var now=new Date();
+    var ts=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
     debugLines.push(ts+' '+msg);
     if(debugLines.length>30)debugLines.shift();
     var el=document.getElementById('debugPanel');
@@ -174,12 +219,16 @@ async function tryAutoConnect(){
     try{
         var r=await fetch(APP_URL+'/api/status',{cache:'no-store',signal:AbortSignal.timeout(3000)});
         if(r.ok){
-            document.getElementById('autoDot').className='auto-dot on';
-            document.getElementById('autoText').textContent='✅ 截屏App已连接';
-            showToast('✅ 已连接！');
-            log('✅ 截屏App连接成功');
-            autoLoop();
-            return;
+            var info=await r.json();
+            if(info.running){
+                document.getElementById('autoDot').className='auto-dot on';
+                document.getElementById('autoText').textContent='✅ 已连接';
+                if(!info.hasScreenshot){
+                    log('⚠️ 截屏服务运行中但暂无截图 (已截'+info.captureCount+'张 '+info.error+')');
+                }
+                autoLoop();
+                return;
+            }
         }
     }catch(e){log('❌ 连接失败: '+e.message)}
     document.getElementById('autoDot').className='auto-dot off';
@@ -201,17 +250,18 @@ async function autoLoop(){
                 c.getContext('2d').drawImage(img,0,0);
                 c.style.display='block';
                 document.getElementById('noSrc').style.display='none';
-                log('📸 截图: '+img.width+'x'+img.height+' ('+blob.size+'B)');
+                log('📸 '+img.width+'x'+img.height);
                 var res=analyzeFrame(c);
-                log('🎯 识别到 '+res.length+' 张牌: '+res.map(function(i){return getTileName(i)}).join(' '));
                 if(res.length>0)applyOcrResult(res);
             };
             img.onerror=function(){log('❌ 图片加载失败')};
             img.src=URL.createObjectURL(blob);
         }else{
-            log('❌ 请求失败: '+r.status);
+            var st=await fetch(APP_URL+'/api/status',{cache:'no-store',signal:AbortSignal.timeout(2000)}).then(function(r){return r.json()}).catch(function(){return null});
+            if(st)log('❌ 404 截图数:'+st.captureCount+' 错误:'+st.error);
+            else log('❌ 404 无截图');
         }
-    }catch(e){log('❌ 错误: '+e.message)}
+    }catch(e){log('❌ '+e.message)}
     autoTimer=setTimeout(autoLoop,1200);
 }
 
@@ -228,101 +278,67 @@ function snapOnce(){if(!isAuto)startAuto()}
 
 function analyzeFrame(canvas){
     var ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
-
-    // 扩大搜索范围：y=80%-100%，覆盖分屏和全屏
     var handY1=Math.floor(h*0.80);
     var handY2=h;
     var handX1=Math.floor(w*0.02);
     var handX2=Math.floor(w*0.98);
-
     var imgData=ctx.getImageData(handX1,handY1,handX2-handX1,handY2-handY1);
     var hw=handX2-handX1,hh=handY2-handY1;
     var d=imgData.data;
+    log('🔍 '+hw+'x'+hh);
 
-    log('🔍 扫描区: '+hw+'x'+hh+' (y='+handY1+'-'+handY2+')');
-
-    // Step 1: 逐行扫描找到手牌行的y位置
-    // 手牌行特征：某几行有大量白色像素
+    // 逐行扫描找手牌行
     var rowBright=[];
     for(var y=0;y<hh;y++){
         var bright=0;
         for(var x=0;x<hw;x++){
             var i=(y*hw+x)*4;
-            var r=d[i],g=d[i+1],b=d[i+2];
-            if(r>160&&g>160&&b>140)bright++;  // 放宽白色阈值
+            if(d[i]>160&&d[i+1]>160&&d[i+2]>140)bright++;
         }
         rowBright.push(bright);
     }
-
-    // 找到手牌行：白色像素密度最高的连续区域
     var maxRowBright=0,maxRowY=0;
-    for(var y=0;y<hh;y++){
-        if(rowBright[y]>maxRowBright){maxRowBright=rowBright[y];maxRowY=y}
-    }
-    
-    // 手牌区域：白色像素密度>最大值30%的行
+    for(var y=0;y<hh;y++){if(rowBright[y]>maxRowBright){maxRowBright=rowBright[y];maxRowY=y}}
     var tileRowStart=-1,tileRowEnd=-1;
     var threshold=Math.max(hw*0.15,maxRowBright*0.3);
     for(var y=0;y<hh;y++){
-        if(rowBright[y]>=threshold){
-            if(tileRowStart===-1)tileRowStart=y;
-            tileRowEnd=y;
-        }
+        if(rowBright[y]>=threshold){if(tileRowStart===-1)tileRowStart=y;tileRowEnd=y}
     }
-    
     if(tileRowStart===-1){
-        log('⚠️ 未找到手牌行 (maxBright='+maxRowBright+' at y='+maxRowY+')');
-        // 尝试降级：用y=90%-100%
-        tileRowStart=Math.floor(hh*0.85);
-        tileRowEnd=hh;
-        log('↩️ 降级扫描 y='+tileRowStart+'-'+tileRowEnd);
+        tileRowStart=Math.floor(hh*0.85);tileRowEnd=hh;
+        log('↩️ 降级扫描');
     }else{
-        // 扩展上下各5px
         tileRowStart=Math.max(0,tileRowStart-5);
         tileRowEnd=Math.min(hh-1,tileRowEnd+5);
-        log('📌 手牌行: y='+tileRowStart+'-'+tileRowEnd+' (最高白像素='+maxRowBright+' at y='+maxRowY+')');
+        log('📌 手牌行 y='+tileRowStart+'-'+tileRowEnd);
     }
-
     var tileHH=tileRowEnd-tileRowStart+1;
 
-    // Step 2: 在手牌行内逐列检测白色像素
+    // 逐列检测白色像素
     var colBright=[];
     for(var x=0;x<hw;x++){
         var bright=0;
         for(var y=tileRowStart;y<=tileRowEnd;y++){
             var i=(y*hw+x)*4;
-            var r=d[i],g=d[i+1],b=d[i+2];
-            if(r>160&&g>160&&b>140)bright++;
+            if(d[i]>160&&d[i+1]>160&&d[i+2]>140)bright++;
         }
         colBright.push(bright);
     }
-
-    // 找牌区域：白色像素列宽度>8px
     var minColBright=Math.max(3,tileHH*0.15);
     var inTile=false,tileStart=0,tileRegions=[];
     for(var x=0;x<hw;x++){
-        if(colBright[x]>minColBright&&!inTile){
-            inTile=true;tileStart=x;
-        }else if(colBright[x]<=minColBright&&inTile){
+        if(colBright[x]>minColBright&&!inTile){inTile=true;tileStart=x}
+        else if(colBright[x]<=minColBright&&inTile){
             inTile=false;
             if(x-tileStart>6)tileRegions.push({x1:tileStart,x2:x,w:x-tileStart});
         }
     }
     if(inTile&&hw-tileStart>6)tileRegions.push({x1:tileStart,x2:hw,w:hw-tileStart});
+    log('🀄 '+tileRegions.length+'个区域');
+    if(tileRegions.length===0)return[];
 
-    log('🀄 检测到 '+tileRegions.length+' 个牌区域');
-
-    if(tileRegions.length===0){
-        // 输出前几列的白色像素数帮助诊断
-        var sample='';
-        for(var x=0;x<Math.min(50,hw);x++)sample+=colBright[x]+(x%10===9?'|':' ');
-        log('📊 列白色采样: '+sample);
-        return[];
-    }
-
-    // Step 3: 合并相邻小区域、拆分过大区域
+    // 合并拆分
     var avgW=tileRegions.reduce(function(s,t){return s+t.w},0)/tileRegions.length;
-    log('📏 平均牌宽: '+Math.round(avgW)+'px');
     var tiles=[];
     for(var i=0;i<tileRegions.length;i++){
         var t=tileRegions[i];
@@ -330,92 +346,47 @@ function analyzeFrame(canvas){
             var numSplit=Math.round(t.w/avgW);
             var splitW=t.w/numSplit;
             for(var s=0;s<numSplit;s++){
-                var sx1=Math.round(t.x1+s*splitW);
-                var sx2=Math.round(t.x1+(s+1)*splitW);
-                tiles.push({x1:sx1,x2:sx2,w:sx2-sx1});
+                tiles.push({x1:Math.round(t.x1+s*splitW),x2:Math.round(t.x1+(s+1)*splitW),w:Math.round(splitW)});
             }
-        }else{
-            tiles.push(t);
-        }
+        }else{tiles.push(t)}
     }
 
-    // Step 4: 对每个牌区域分析颜色
+    // 颜色分析
     var results=[];
     for(var i=0;i<tiles.length;i++){
         var t=tiles[i];
-        var redPx=0,greenPx=0,bluePx=0,yellowPx=0,whitePx=0,totalPx=0;
-        
+        var redPx=0,greenPx=0,bluePx=0,whitePx=0,totalPx=0;
         for(var x=t.x1;x<t.x2;x++){
             for(var y=tileRowStart;y<=tileRowEnd;y++){
                 var idx=(y*hw+x)*4;
                 var r=d[idx],g=d[idx+1],b=d[idx+2];
                 totalPx++;
-                // 白色/奶白色背景
                 if(r>160&&g>160&&b>140){whitePx++;continue}
-                // 万字(红色系): R高, G和B低
                 if(r>80&&g<100&&b<100){redPx++;continue}
-                // 条子(绿色系): G高, R和B低
                 if(g>80&&r<100&&b<100){greenPx++;continue}
-                // 筒子(蓝色/青色/紫色): B高, 或B+R混合但G低
                 if(b>70||(r>70&&b>70&&g<80)){bluePx++;continue}
-                // 其他暗色/杂色忽略
             }
         }
-
         var colored=redPx+greenPx+bluePx;
-        var whiteRatio=whitePx/Math.max(1,totalPx);
-        
-        if(colored<3&&whiteRatio<0.15){
-            log('  牌'+i+': w='+t.w+' 跳过(白'+whitePx+' 有色'+colored+')');
-            continue;
-        }
-
+        if(colored<3&&whitePx/Math.max(1,totalPx)<0.15)continue;
         var suit,suitIdx;
-        // 按有色像素数判断花色
-        if(redPx>=greenPx&&redPx>=bluePx&&redPx>=2){
-            suit='万';suitIdx=0;
-        }else if(greenPx>=redPx&&greenPx>=bluePx&&greenPx>=2){
-            suit='条';suitIdx=9;
-        }else if(bluePx>=2){
-            suit='筒';suitIdx=18;
-        }else if(colored<3){
-            // 有色像素太少，可能是牌背或空白
-            log('  牌'+i+': w='+t.w+' 有色太少('+colored+') 跳过');
-            continue;
-        }else{
-            suit='?';suitIdx=-1;
-        }
+        if(redPx>=greenPx&&redPx>=bluePx&&redPx>=2){suit='万';suitIdx=0}
+        else if(greenPx>=redPx&&greenPx>=bluePx&&greenPx>=2){suit='条';suitIdx=9}
+        else if(bluePx>=2){suit='筒';suitIdx=18}
+        else continue;
 
-        // 数字识别：基于有色像素总量估算
+        var total=redPx+greenPx+bluePx;
         var num=1;
-        if(suitIdx>=0){
-            var total=redPx+greenPx+bluePx;
-            var tileArea=(t.x2-t.x1)*tileHH;
-            var density=total/Math.max(1,tileArea);
-            
-            // 基于密度和总量的粗略映射
-            // 需要根据实际数据校准
-            if(total<15)num=1;
-            else if(total<30)num=2;
-            else if(total<45)num=3;
-            else if(total<60)num=4;
-            else if(total<80)num=5;
-            else if(total<100)num=6;
-            else if(total<125)num=7;
-            else if(total<155)num=8;
-            else num=9;
-        }
+        if(total<15)num=1;else if(total<30)num=2;else if(total<45)num=3;
+        else if(total<60)num=4;else if(total<80)num=5;else if(total<100)num=6;
+        else if(total<125)num=7;else if(total<155)num=8;else num=9;
 
         var idx=suitIdx+(num-1);
         if(idx>=0&&idx<27){
             results.push(idx);
-            log('  牌'+i+': x='+t.x1+'-'+t.x2+' w='+t.w+' R='+redPx+' G='+greenPx+' B='+bluePx+' 白='+whitePx+' → '+TN[num-1]+suit);
-        }else{
-            log('  牌'+i+': w='+t.w+' R='+redPx+' G='+greenPx+' B='+bluePx+' → 未知');
+            log('  '+TN[num-1]+suit+' R'+redPx+' G'+greenPx+' B'+bluePx);
         }
     }
-
-    // 多帧投票
     frameResults.push(results);
     if(frameResults.length>5)frameResults.shift();
     return voteResults(frameResults);
@@ -426,21 +397,22 @@ function voteResults(frames){
     var counts={};
     frames.forEach(function(f){f.forEach(function(idx){counts[idx]=(counts[idx]||0)+1})});
     var result=[];
-    for(var k in counts){
-        if(counts[k]>=Math.max(2,frames.length-1)){
-            result.push(parseInt(k));
-        }
-    }
+    for(var k in counts){if(counts[k]>=Math.max(2,frames.length-1))result.push(parseInt(k))}
     return result.sort(function(a,b){return a-b});
 }
 
 function applyOcrResult(tiles){
+    var oldHand=hand.slice();
     hand=new Array(27).fill(0);
     tiles.forEach(function(idx){hand[idx]++});
     selectedTile=-1;
+    handSize=tiles.length;
+    
+    // 检测碰杠胡
+    checkPengGangHu(oldHand);
+    
     document.getElementById('btnDiscard').disabled=true;
     updateDisplay();
-    // 更新OCR显示行
     var html='';
     tiles.forEach(function(idx){
         var cls=idx<9?'wan':idx<18?'tiao':'tong';
@@ -449,13 +421,163 @@ function applyOcrResult(tiles){
     document.getElementById('ocrRow').innerHTML=html;
 }
 
+function checkPengGangHu(oldHand){
+    var alertHu=document.getElementById('alertHu');
+    var alertPeng=document.getElementById('alertPeng');
+    var alertGang=document.getElementById('alertGang');
+    var btnPeng=document.getElementById('btnPeng');
+    var btnGang=document.getElementById('btnGang');
+    
+    // 隐藏所有警报
+    alertHu.className='alert-bar hu';
+    alertPeng.className='alert-bar peng';
+    alertGang.className='alert-bar gang';
+    btnPeng.style.display='none';
+    btnGang.style.display='none';
+    
+    // 检查胡牌
+    var xt=calcXT(hand);
+    if(xt===-1){
+        alertHu.className='alert-bar hu show';
+        log('🎉 可以胡牌！');
+        return;
+    }
+    
+    // 检查暗杠（手中有4张相同的牌）
+    var gangTiles=[];
+    for(var i=0;i<27;i++){
+        if(hand[i]>=4)gangTiles.push(i);
+    }
+    if(gangTiles.length>0){
+        var names=gangTiles.map(function(i){return getTileName(i)}).join(' ');
+        document.getElementById('gangText').textContent='💡 可以暗杠: '+names;
+        alertGang.className='alert-bar gang show';
+        btnGang.style.display='';
+        log('💡 暗杠: '+names);
+    }
+    
+    // 检查碰（手中有3张相同的牌，碰杠可碰）
+    // 注意：碰是对手出的牌你有2张才能碰，这里检测你手中有3张=已经碰了或在手里
+    // 实际碰检测需要知道对手刚出了什么牌
+    // 这里检测：如果有3张相同的，提示可以碰（如果对手打出第4张的话）
+    var pengReady=[];
+    for(var i=0;i<27;i++){
+        if(hand[i]===3){
+            pengReady.push(i);
+        }
+    }
+    if(pengReady.length>0&&handSize%3===2){
+        // 手牌数%3===2 说明是正常手牌（13张=4*3+1 或 10张=3*3+1等）
+        var names=pengReady.map(function(i){return getTileName(i)}).join(' ');
+        document.getElementById('pengText').textContent='👀 碰待: 对手出'+names+'可碰';
+        alertPeng.className='alert-bar peng show';
+        log('👀 碰待: '+names);
+    }
+    
+    // 检测新摸牌（手牌从13变14）
+    var oldTotal=0;oldHand.forEach(function(c){oldTotal+=c});
+    var newTotal=0;hand.forEach(function(c){newTotal+=c});
+    if(newTotal===14&&oldTotal===13){
+        log('📌 摸牌了！14张手牌，需出牌');
+        showToast('📌 摸牌了，请选择出牌');
+    }
+}
+
+function doPeng(){
+    showToast('碰！');
+    log('✅ 确认碰');
+}
+function doGang(){
+    showToast('杠！');
+    log('✅ 确认杠');
+}
+
+// 对手弃牌管理
+function addDiscard(){
+    var suit=parseInt(document.getElementById('discardSuit').value);
+    var num=parseInt(document.getElementById('discardNum').value);
+    var idx=suit+num;
+    discards[idx]++;
+    updateDiscardDisplay();
+    updatePredictions();
+    updateDisplay();
+    log('📤 对手出: '+getTileName(idx));
+}
+
+function removeDiscard(idx){
+    if(discards[idx]>0){
+        discards[idx]--;
+        updateDiscardDisplay();
+        updatePredictions();
+        updateDisplay();
+    }
+}
+
+function clearDiscards(){
+    discards=new Array(27).fill(0);
+    updateDiscardDisplay();
+    updatePredictions();
+    updateDisplay();
+    log('📤 弃牌池已清空');
+}
+
+function updateDiscardDisplay(){
+    var html='';
+    for(var i=0;i<27;i++){
+        if(discards[i]>0){
+            var cls=i<9?'wan':i<18?'tiao':'tong';
+            for(var j=0;j<discards[i];j++){
+                html+='<span class="discard-tile '+cls+'" onclick="removeDiscard('+i+')">'+getTileName(i)+'</span>';
+            }
+        }
+    }
+    document.getElementById('discardPool').innerHTML=html||'<span style="color:#555;font-size:.5rem">无记录</span>';
+}
+
+function updatePredictions(){
+    var section=document.getElementById('predictSection');
+    var row=document.getElementById('predictRow');
+    var totalDisc=0;discards.forEach(function(c){totalDisc+=c});
+    if(totalDisc===0){section.style.display='none';return}
+    section.style.display='';
+    
+    // 基于弃牌池推测危险牌
+    // 规则：对手打出的牌周边是安全牌，没打出的花色中数字是危险牌
+    var html='';
+    var suitDisc=[[0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0]];
+    for(var i=0;i<27;i++){suitDisc[Math.floor(i/9)][i%9]=discards[i]}
+    
+    for(var i=0;i<27;i++){
+        var rem=getRem(i);
+        if(rem===0)continue;
+        var s=Math.floor(i/9),n=i%9;
+        var danger=50;
+        // 对手打过的牌周边偏安全
+        if(suitDisc[s][n]>0)danger-=30;
+        if(n>0&&suitDisc[s][n-1]>0)danger-=15;
+        if(n<8&&suitDisc[s][n+1]>0)danger-=15;
+        // 没打过的花色偏危险
+        var suitTotal=0;for(var j=0;j<9;j++)suitTotal+=suitDisc[s][j];
+        if(suitTotal===0)danger+=20;
+        // 中张更危险
+        if(n>=2&&n<=6)danger+=10;
+        // 余牌少的危险
+        if(rem<=1)danger+=20;
+        else if(rem===2)danger+=10;
+        
+        danger=Math.max(0,Math.min(100,danger));
+        var cls=danger>=65?'danger':danger>=35?'mid':'safe';
+        html+='<span class="predict-tile '+cls+'" title="危险'+danger+'%">'+getTileName(i)+'</span>';
+    }
+    row.innerHTML=html;
+}
+
 function updateDisplay(){updateHandDisplay();updateStats();updateMissing();updateAllPanels()}
 
 function updateHandDisplay(){
-    var html='',hasHand=false;
+    var html='';
     for(var i=0;i<27;i++){
         if(!hand[i])continue;
-        hasHand=true;
         var suit=i<9?'wan':i<18?'tiao':'tong';
         var sn=i<9?'万':i<18?'条':'筒';
         for(var j=0;j<hand[i];j++){
@@ -463,13 +585,14 @@ function updateHandDisplay(){
             html+='<div class="tile '+suit+' '+sel+'" onclick="selectTile('+i+')"><span class="tn">'+TN[i%9]+'</span><span class="ts">'+sn+'</span></div>';
         }
     }
-    document.getElementById('handRow').innerHTML=html||'<span style="color:#555;font-size:.65rem">等待识别...</span>';
+    document.getElementById('handRow').innerHTML=html||'<span style="color:#555;font-size:.6rem">等待识别...</span>';
 }
 
 function updateStats(){
     var total=0;hand.forEach(function(c){total+=c});
     document.getElementById('tileCount').textContent=total+'张';
-    document.getElementById('remainCount').textContent=(84-totalDiscarded)+'张可摸';
+    var totalDisc=0;discards.forEach(function(c){totalDisc+=c});
+    document.getElementById('remainCount').textContent=(84-totalDiscarded-totalDisc)+'张可摸';
     var pb=document.getElementById('phaseBadge');
     if(totalDiscarded<=12){phase='early';pb.textContent='前期';pb.className='chip early'}
     else if(totalDiscarded<=36){phase='mid';pb.textContent='中期';pb.className='chip mid'}
@@ -496,18 +619,29 @@ function selectTile(idx){
 function confirmDiscard(){
     if(selectedTile<0)return;
     hand[selectedTile]--;
+    discards[selectedTile]++; // 自己出的也加入弃牌池
     totalDiscarded++;
     selectedTile=-1;
     document.getElementById('btnDiscard').disabled=true;
+    updateDiscardDisplay();
+    updatePredictions();
     updateDisplay();
 }
 
 function newRound(){
     hand=new Array(27).fill(0);selectedTile=-1;totalDiscarded=0;thrownChick=false;frameResults=[];
+    discards=new Array(27).fill(0);handSize=0;
     debugLines=[];
     document.getElementById('btnDiscard').disabled=true;
+    document.getElementById('btnPeng').style.display='none';
+    document.getElementById('btnGang').style.display='none';
+    document.getElementById('alertHu').className='alert-bar hu';
+    document.getElementById('alertPeng').className='alert-bar peng';
+    document.getElementById('alertGang').className='alert-bar gang';
     document.getElementById('ocrRow').innerHTML='';
     document.getElementById('debugPanel').innerHTML='';
+    document.getElementById('predictSection').style.display='none';
+    updateDiscardDisplay();
     updateDisplay();
     showToast('🔄 新一局');
 }
@@ -528,7 +662,7 @@ function updateAdvice(){
     var el=document.getElementById('tabAdvice'),total=0;hand.forEach(function(c){total+=c});
     if(!total){el.innerHTML='<span style="color:#555">等待识别手牌...</span>';return}
     var xt=calcXT(hand);
-    if(xt===-1){el.innerHTML='<div style="text-align:center;padding:10px"><div style="font-size:1.5rem">🎉</div><div style="color:var(--gold);font-size:1rem;font-weight:800">可以胡牌！</div></div>';return}
+    if(xt===-1){el.innerHTML='<div style="text-align:center;padding:8px"><div style="font-size:1.2rem">🎉</div><div style="color:var(--gold);font-size:.9rem;font-weight:800">可以胡牌！</div></div>';return}
     var sugs=genSugs();
     if(!sugs.length){el.innerHTML='<span style="color:#555">无法生成建议</span>';return}
     var best=sugs[0];
@@ -542,7 +676,7 @@ function updateAdvice(){
     else if(best.safety<40)html+='<span class="rtag bad">🔴危险</span>';
     html+='</div></div>';
     if(sugs.length>1){
-        html+='<div style="margin-top:4px">';
+        html+='<div>';
         sugs.slice(0,5).forEach(function(s){
             var pct=Math.round(s.jz/Math.max(1,best.jz)*100),cls=pct>=70?'high':pct>=40?'mid':'low';
             html+='<div class="prob-row"><span class="prob-name" style="color:'+tileColor(s.idx)+'">'+getTileName(s.idx)+'</span>';
@@ -570,9 +704,15 @@ function genSugs(){
 
 function calcSafety(idx){
     var safety=50,num=idx%9,remain=getRem(idx);
-    safety+=remain*5;if(num===0||num===8)safety+=10;if(num===0)safety+=5;
+    safety+=remain*5;if(num===0||num===8)safety+=10;
     if(phase==='late'){if(remain>=3&&num>=2&&num<=6)safety-=15}
     else if(phase==='early')safety+=5;
+    // 基于弃牌池调整安全性
+    if(discards[idx]>0)safety+=20; // 对手已打出过，偏安全
+    // 对手打过相邻牌
+    var s=Math.floor(idx/9);
+    if(num>0&&discards[s*9+num-1]>0)safety+=10;
+    if(num<8&&discards[s*9+num+1]>0)safety+=10;
     return Math.max(0,Math.min(100,safety));
 }
 
@@ -581,7 +721,7 @@ function updateTing(){
     if(xt!==0){el.innerHTML='<span style="color:#555">当前向听数: '+xt+'，听牌后显示</span>';return}
     var list=findTing(hand);
     if(!list.length){el.innerHTML='<span style="color:#555">无听牌</span>';return}
-    var html='<div style="font-size:.75rem;font-weight:800;color:var(--gold);margin-bottom:4px">🎯 听牌！</div>';
+    var html='<div style="font-size:.7rem;font-weight:800;color:var(--gold);margin-bottom:3px">🎯 听牌！</div>';
     list.sort(function(a,b){return getRem(b)-getRem(a)});
     list.forEach(function(t){
         var rem=getRem(t),cls=rem>=5?'high':rem>=3?'mid':'low';
@@ -593,7 +733,7 @@ function updateTing(){
 
 function updateDefense(){
     var el=document.getElementById('tabDefense');
-    if(phase!=='late'&&phase!=='mid'){el.innerHTML='<span style="color:#555;font-size:.65rem">中后期激活</span>';return}
+    if(phase!=='late'&&phase!=='mid'){el.innerHTML='<span style="color:#555;font-size:.6rem">中后期激活</span>';return}
     var items=[];
     for(var i=0;i<27;i++){if(hand[i])items.push({idx:i,safety:calcSafety(i)})}
     items.sort(function(a,b){return b.safety-a.safety});
@@ -621,7 +761,7 @@ function updateRemain(){
 
 function getTileName(idx){return TN[idx%9]+(idx<9?'万':idx<18?'条':'筒')}
 function tileColor(idx){return idx<9?'var(--red)':idx<18?'var(--green)':'var(--blue)'}
-function getRem(idx){var c=4-hand[idx];return Math.max(0,c)}
+function getRem(idx){return Math.max(0,4-hand[idx]-discards[idx])}
 
 function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},1500)}
 
@@ -658,7 +798,8 @@ function countJZ(tiles,curXT){
     return count;
 }
 
-log('🀄 v12 已加载，等待启动...');
+log('🀄 v13 已加载');
+updateDiscardDisplay();
 window.addEventListener('load',function(){updateDisplay()});
 </script>
 </body>
