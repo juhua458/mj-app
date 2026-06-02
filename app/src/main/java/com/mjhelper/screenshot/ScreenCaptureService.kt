@@ -69,9 +69,10 @@ class ScreenCaptureService : Service() {
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         wm.defaultDisplay.getMetrics(metrics)
-        screenWidth = metrics.widthPixels / 2
-        screenHeight = metrics.heightPixels / 2
-        screenDensity = metrics.densityDpi / 2
+        // Use 3/4 resolution for better recognition quality
+        screenWidth = metrics.widthPixels * 3 / 4
+        screenHeight = metrics.heightPixels * 3 / 4
+        screenDensity = metrics.densityDpi * 3 / 4
 
         // Android 14+ 必须指定 foregroundServiceType
         val notification = createNotification()
