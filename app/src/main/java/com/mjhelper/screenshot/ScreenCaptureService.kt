@@ -138,16 +138,11 @@ class ScreenCaptureService : Service() {
                 bitmap.copyPixelsFromBuffer(buffer)
                 image.close()
 
-                // 裁剪底部40%（手牌区域）减少数据量
-                val cropTop = (bitmap.height * 0.6).toInt()
-                val cropped = Bitmap.createBitmap(bitmap, 0, cropTop, bitmap.width, bitmap.height - cropTop)
-                bitmap.recycle()
-
-                // 压缩为JPEG
+                // 传完整截图，由提示器自行裁剪识别
                 val stream = ByteArrayOutputStream()
-                cropped.compress(Bitmap.CompressFormat.JPEG, 80, stream)
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 70, stream)
                 latestScreenshot = stream.toByteArray()
-                cropped.recycle()
+                bitmap.recycle()
             }
         } catch (e: Exception) {
             // 静默处理，下次继续
