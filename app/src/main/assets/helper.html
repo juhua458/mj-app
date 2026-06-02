@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>🀄 捉鸡麻将提示器 v14</title>
+<title>🀄 捉鸡麻将提示器 v15</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{--bg:#0a0e1a;--bg2:#131825;--card:#1c2333;--text:#e8edf5;--text2:#8b95a8;--red:#e54545;--green:#2ebd5e;--blue:#4a8eff;--gold:#f0a030;--purple:#9b5dff}
@@ -48,35 +48,33 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 .tile{width:26px;height:34px;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:transform .1s;box-shadow:0 1px 2px rgba(0,0,0,.3)}
 .tile.wan{background:linear-gradient(180deg,#fff,#fde8e8)}.tile.tiao{background:linear-gradient(180deg,#fff,#e8fde8)}.tile.tong{background:linear-gradient(180deg,#fff,#e8e8fd)}
 .tile .tn{font-size:11px;font-weight:800;line-height:1}.tile.wan .tn{color:var(--red)}.tile.tiao .tn{color:var(--green)}.tile.tong .tn{color:var(--blue)}
-.tile .ts{font-size:4px;opacity:.6;margin-top:1px}
-.tile.sel{border:2px solid var(--gold);box-shadow:0 0 6px rgba(240,160,48,.5);transform:translateY(-2px)}
+.tile .ts{font-size:7px;font-weight:600;line-height:1}.tile.wan .ts{color:var(--red)}.tile.tiao .ts{color:var(--green)}.tile.tong .ts{color:var(--blue)}
+.tile.sel{transform:scale(1.15);box-shadow:0 0 8px var(--gold)}
 .op-row{display:flex;gap:3px;margin-top:3px}
-.op-btn{flex:1;padding:6px;border:none;border-radius:4px;font-size:.65rem;font-weight:800;cursor:pointer;color:#fff}
-.op-btn:active{transform:scale(.97)}
-.op-btn.draw{background:linear-gradient(135deg,var(--green),#1a9c4a)}
-.op-btn.discard{background:linear-gradient(135deg,var(--blue),#2a6ed4)}
-.op-btn:disabled{opacity:.4;cursor:not-allowed}
-.miss-bar{padding:2px 8px;font-size:.55rem;flex-shrink:0}
-.miss-bar.ok{color:var(--green)}.miss-bar.warn{color:var(--gold)}
-.discard-section{padding:4px 8px;background:var(--bg2);flex-shrink:0;border-top:1px solid #222}
-.discard-title{font-size:.6rem;color:var(--text2);margin-bottom:3px;display:flex;justify-content:space-between;align-items:center}
-.discard-title span{cursor:pointer;color:var(--blue)}
-.discard-pool{display:flex;gap:1px;flex-wrap:wrap;min-height:18px;padding:2px;background:var(--bg);border-radius:3px}
-.discard-tile{padding:1px 3px;border-radius:2px;font-size:.5rem;font-weight:700;color:#fff;cursor:pointer}
-.discard-tile.wan{background:#b03030}.discard-tile.tiao{background:#209030}.discard-tile.tong{background:#2060c0}
-.discard-add{display:flex;gap:2px;margin-top:3px;flex-wrap:wrap}
-.discard-add select{background:var(--card);color:var(--text);border:1px solid #444;border-radius:3px;font-size:.55rem;padding:1px 2px;max-width:50px}
-.discard-add button{padding:2px 6px;border:none;border-radius:3px;font-size:.55rem;font-weight:700;cursor:pointer;color:#fff;background:var(--purple)}
-.predict-section{padding:4px 8px;background:var(--bg2);flex-shrink:0;border-top:1px solid #222}
-.predict-title{font-size:.6rem;color:var(--gold);margin-bottom:3px}
+.op-btn{flex:1;padding:4px;border:none;border-radius:4px;font-size:.6rem;font-weight:700;cursor:pointer;color:#fff}
+.op-btn.discard{background:var(--red)}.op-btn.draw{background:var(--blue)}.op-btn.peng{background:var(--gold);color:#000}.op-btn.gang{background:var(--purple)}
+.op-btn:disabled{opacity:.4}
+.miss-bar{padding:2px 8px;font-size:.55rem;font-weight:700;flex-shrink:0}
+.miss-bar.ok{background:rgba(46,189,94,.1);color:var(--green)}.miss-bar.warn{background:rgba(240,160,48,.1);color:var(--gold)}
+.discard-section{padding:4px 8px;background:var(--bg2);flex-shrink:0}
+.discard-title{font-size:.55rem;font-weight:700;color:var(--text2);margin-bottom:2px;display:flex;justify-content:space-between}
+.discard-title span{color:var(--red);cursor:pointer}
+.discard-pool{display:flex;gap:1px;flex-wrap:wrap;min-height:16px;padding:2px;background:var(--bg);border-radius:3px}
+.discard-tile{padding:1px 3px;border-radius:2px;font-size:.5rem;font-weight:700;cursor:pointer}
+.discard-tile.wan{background:rgba(229,69,69,.2);color:var(--red)}.discard-tile.tiao{background:rgba(46,189,94,.2);color:var(--green)}.discard-tile.tong{background:rgba(74,142,255,.2);color:var(--blue)}
+.discard-add{display:flex;gap:2px;margin-top:3px}
+.discard-add select{flex:1;padding:2px;border-radius:3px;background:var(--card);color:var(--text);border:none;font-size:.55rem}
+.discard-add button{padding:2px 8px;border-radius:3px;background:var(--gold);color:#000;border:none;font-size:.55rem;font-weight:700}
+.predict-section{padding:4px 8px;background:var(--bg2);flex-shrink:0;display:none}
+.predict-title{font-size:.55rem;font-weight:700;color:var(--text2);margin-bottom:2px}
 .predict-row{display:flex;gap:1px;flex-wrap:wrap}
-.predict-tile{padding:1px 3px;border-radius:2px;font-size:.5rem;font-weight:600}
-.predict-tile.danger{background:rgba(229,69,69,.2);color:var(--red)}
-.predict-tile.safe{background:rgba(46,189,94,.2);color:var(--green)}
-.predict-tile.mid{background:rgba(224,168,32,.2);color:var(--gold)}
-.strategy{padding:4px 8px;flex-shrink:0}
-.tab-bar{display:flex;gap:2px;margin-bottom:4px;flex-shrink:0}
-.tab-btn{flex:1;padding:4px;border:none;border-radius:3px;font-size:.55rem;font-weight:700;cursor:pointer;background:var(--card);color:var(--text2)}
+.predict-tile{padding:1px 3px;border-radius:2px;font-size:.5rem;font-weight:700}
+.predict-tile.safe{background:rgba(46,189,94,.15);color:var(--green)}
+.predict-tile.mid{background:rgba(224,168,32,.15);color:var(--gold)}
+.predict-tile.danger{background:rgba(229,69,69,.15);color:var(--red)}
+.strategy{padding:4px 8px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.tab-bar{display:flex;gap:2px;margin-bottom:4px}
+.tab-btn{flex:1;padding:3px;border:none;border-radius:3px;background:var(--card);color:var(--text2);font-size:.55rem;font-weight:700;cursor:pointer}
 .tab-btn.active{background:var(--gold);color:#000}
 .tab-content{display:none}.tab-content.active{display:block}
 .best-card{background:var(--card);border-radius:6px;padding:6px;margin-bottom:4px;border:1px solid rgba(240,160,48,.3)}
@@ -104,7 +102,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 <body>
 <div class="app">
 <div id="debugPanel" class="debug"></div>
-<div class="top-bar"><h1>🀄 捉鸡麻将 v14</h1><div></div></div>
+<div class="top-bar"><h1>🀄 捉鸡麻将 v15</h1><div></div></div>
 <div class="status-bar">
 <span id="phaseBadge" class="chip early">前期</span>
 <span id="tileCount" class="chip cnt">0张</span>
@@ -148,7 +146,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 <button onclick="addDiscard()">+出牌</button>
 </div>
 </div>
-<div class="predict-section" id="predictSection" style="display:none">
+<div class="predict-section" id="predictSection">
 <div class="predict-title">🎯 危险牌推测</div>
 <div class="predict-row" id="predictRow"></div>
 </div>
@@ -176,6 +174,7 @@ var isAuto=false,autoTimer=null,frameResults=[];
 var debugLines=[];
 var discards=new Array(27).fill(0);
 var handSize=0;
+var lastGoodResult=null;
 
 function log(msg){
     var now=new Date();
@@ -231,7 +230,12 @@ async function autoLoop(){
                 document.getElementById('noSrc').style.display='none';
                 log('📸 '+img.width+'x'+img.height);
                 var res=analyzeFrame(c);
-                if(res.length>0)applyOcrResult(res);
+                if(res.length>0){
+                    lastGoodResult=res;
+                    applyOcrResult(res);
+                }else if(lastGoodResult){
+                    log('⚠️ 本次未识别，沿用上次结果');
+                }
             };
             img.onerror=function(){log('❌ 图片加载失败')};
             img.src=URL.createObjectURL(blob);
@@ -254,142 +258,189 @@ function snapOnce(){if(!isAuto)startAuto()}
 
 function analyzeFrame(canvas){
     var ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
-
-    // Step 1: 自动找手牌行（白色像素密度最高的行区域）
-    var handY1=Math.floor(h*0.80),handY2=h;
-    var imgData=ctx.getImageData(0,handY1,w,handY2-handY1);
+    var imgData=ctx.getImageData(0,0,w,h);
     var d=imgData.data;
-    var scanH=handY2-handY1;
-    log('🔍 扫描 y='+handY1+'-'+handY2+' ('+w+'x'+scanH+')');
 
-    // 逐行白色像素
-    var rowWhite=[];
-    for(var y=0;y<scanH;y++){
-        var wt=0;for(var x=0;x<w;x++){var i=(y*w+x)*4;if(d[i]>150&&d[i+1]>150&&d[i+2]>130)wt++}
-        rowWhite.push(wt);
+    // ========== V15核心改进 ==========
+    // Step1: 检测绿色麻将桌（判断是否在游戏中）
+    var greenSampleCount=0;
+    var sampleStep=Math.max(5,Math.floor(w/200));
+    for(var y=0;y<h;y+=sampleStep){
+        for(var x=0;x<w;x+=sampleStep){
+            var idx=(y*w+x)*4;
+            var r=d[idx],g=d[idx+1],b=d[idx+2];
+            // 绿色桌面: R很低, G较高, B中等, G明显>R和>B
+            if(r<50&&g>30&&g<150&&b<80&&g>r+10&&g>b){
+                greenSampleCount++;
+            }
+        }
+    }
+    var totalSamples=Math.floor(h/sampleStep)*Math.floor(w/sampleStep);
+    var greenRatio=greenSampleCount/totalSamples;
+    log('🟢 桌面绿色: '+greenSampleCount+'/'+totalSamples+' ('+( greenRatio*100).toFixed(1)+'%)');
+
+    // 没有足够的绿色=没在打牌
+    if(greenRatio<0.05){
+        log('⏸️ 未检测到麻将桌，跳过识别');
+        return[];
     }
 
-    // 找白色密度最高的连续区域（手牌行）
-    var maxW=0,maxY=0;
-    for(var y=0;y<scanH;y++){if(rowWhite[y]>maxW){maxW=rowWhite[y];maxY=y}}
-    var thresh=Math.max(w*0.12,maxW*0.25);
-    var trStart=-1,trEnd=-1;
-    for(var y=0;y<scanH;y++){
-        if(rowWhite[y]>=thresh){if(trStart===-1)trStart=y;trEnd=y}
+    // Step2: 找绿色桌面的y范围
+    var tableY1=-1,tableY2=-1;
+    for(var y=0;y<h;y++){
+        var gc=0;
+        for(var x=0;x<w;x+=sampleStep){
+            var idx=(y*w+x)*4;
+            var r=d[idx],g=d[idx+1],b=d[idx+2];
+            if(r<50&&g>30&&g<150&&b<80&&g>r+10&&g>b)gc++;
+        }
+        if(gc>Math.floor(w/sampleStep)*0.1){
+            if(tableY1===-1)tableY1=y;
+            tableY2=y;
+        }
     }
-    if(trStart===-1){trStart=Math.floor(scanH*0.85);trEnd=scanH}
-    else{trStart=Math.max(0,trStart-3);trEnd=Math.min(scanH-1,trEnd+3)}
-    var tileHH=trEnd-trStart+1;
-    log('📌 手牌行 y='+trStart+'-'+trEnd+' 高='+tileHH);
+    if(tableY1===-1){log('⏸️ 桌面范围未找到');return[]}
+    log('🟢 桌面 y='+tableY1+'-'+tableY2);
 
-    // Step 2: 逐列白色像素找牌边界
+    // Step3: 在桌面区域内找手牌行（底部白色像素密集的行）
+    var whiteLines=[];
+    for(var y=tableY2;y>=tableY1;y--){
+        var wc=0;
+        for(var x=0;x<w;x+=3){
+            var idx=(y*w+x)*4;
+            if(d[idx]>200&&d[idx+1]>200&&d[idx+2]>190)wc++;
+        }
+        if(wc>w*0.35/3){
+            whiteLines.push(y);
+        }else if(whiteLines.length>5){
+            break; // 已经找到连续白色行，遇到非白行就停
+        }
+    }
+    if(whiteLines.length<3){log('⏸️ 未找到手牌行');return[]}
+    whiteLines.reverse();
+    var handY1=whiteLines[0];
+    var handY2=whiteLines[whiteLines.length-1];
+    var handHeight=handY2-handY1+1;
+    log('📌 手牌行 y='+handY1+'-'+handY2+' ('+handHeight+'px)');
+
+    // Step4: 找手牌的x范围（白色列）
     var colWhite=[];
     for(var x=0;x<w;x++){
-        var wt=0;for(var y=trStart;y<=trEnd;y++){var i=(y*w+x)*4;if(d[i]>150&&d[i+1]>150&&d[i+2]>130)wt++}
-        colWhite.push(wt);
+        var wc=0;
+        for(var y=handY1;y<=handY2;y++){
+            var idx=(y*w+x)*4;
+            if(d[idx]>200&&d[idx+1]>200&&d[idx+2]>190)wc++;
+        }
+        colWhite.push(wc);
     }
-
-    var minCW=Math.max(3,tileHH*0.12);
-    var inTile=false,tS=0,tiles=[];
+    // 找白色像素>50%行高的列范围
+    var handX1=-1,handX2=-1;
+    var colThresh=handHeight*0.5;
     for(var x=0;x<w;x++){
-        if(colWhite[x]>minCW&&!inTile){inTile=true;tS=x}
-        else if(colWhite[x]<=minCW&&inTile){
-            inTile=false;if(x-tS>6)tiles.push({x1:tS,x2:x,w:x-tS});
+        if(colWhite[x]>colThresh){
+            if(handX1===-1)handX1=x;
+            handX2=x;
         }
     }
-    if(inTile&&w-tS>6)tiles.push({x1:tS,x2:w,w:w-tS});
-    log('🀄 检测到 '+tiles.length+' 个区域');
+    if(handX1===-1){log('⏸️ 未找到手牌列');return[]}
+    var handWidth=handX2-handX1+1;
+    log('📌 手牌列 x='+handX1+'-'+handX2+' (w='+handWidth+')');
 
-    if(tiles.length===0)return[];
+    // Step5: 等宽分割（假设13或14张手牌）
+    // 先用13试试，如果牌太宽就用14
+    var cardCount=13;
+    var cardW=handWidth/cardCount;
+    if(cardW>60){cardCount=14;cardW=handWidth/cardCount}
+    if(cardW<20||cardW>80){log('⏸️ 牌宽异常 '+cardW.toFixed(1));return[]}
+    log('🀄 等宽分割 '+cardCount+'张 牌宽='+cardW.toFixed(1));
 
-    // Step 3: 合并相邻小区域、拆分过大区域
-    var avgW=tiles.reduce(function(s,t){return s+t.w},0)/tiles.length;
-    var mergedTiles=[];
-    // 先合并间距<5px的相邻区域
-    for(var i=0;i<tiles.length;i++){
-        var t=tiles[i];
-        if(mergedTiles.length>0){
-            var last=mergedTiles[mergedTiles.length-1];
-            if(t.x1-last.x2<5){
-                last.x2=t.x2;last.w=last.x2-last.x1;continue;
-            }
-        }
-        mergedTiles.push({x1:t.x1,x2:t.x2,w:t.x2-t.x1});
-    }
-
-    // 拆分过大区域
-    var finalTiles=[];
-    for(var i=0;i<mergedTiles.length;i++){
-        var t=mergedTiles[i];
-        if(t.w>avgW*1.8&&mergedTiles.length<14){
-            var n=Math.round(t.w/avgW);if(n<2)n=2;if(n>4)n=4;
-            var sw=t.w/n;
-            for(var s=0;s<n;s++){
-                var sx1=Math.round(t.x1+s*sw);var sx2=Math.round(t.x1+(s+1)*sw);
-                finalTiles.push({x1:sx1,x2:sx2,w:sx2-sx1});
-            }
-        }else{finalTiles.push(t)}
-    }
-    
-    log('📊 合并后 '+finalTiles.length+' 个牌');
-
-    // Step 4: 花色识别——纯色像素计数法
-    // 万子=纯红(R>120,G<50,B<50)多，条子=纯绿(G>60,R<30,B<30)多，筒子=两者都不多
+    // Step6: 花色识别（V15新算法：三维度判断）
     var results=[];
-    for(var i=0;i<finalTiles.length;i++){
-        var t=finalTiles[i];
-        var pureRed=0,pureGreen=0;
-        
-        for(var x=t.x1;x<t.x2;x++){
-            for(var y=trStart;y<=trEnd;y++){
-                var idx=(y*w+x)*4;
+    for(var i=0;i<cardCount;i++){
+        var x1=Math.round(handX1+i*cardW);
+        var x2=Math.round(handX1+(i+1)*cardW);
+        if(x2>w)x2=w;
+
+        var redPx=0;       // 红色：R>100, G<80, B<80 (万子的红字)
+        var pureGreen=0;   // 纯绿：R<50, G>50, B<50, G>B+20 (条子的绿色条纹)
+        var blueGreen=0;   // 蓝绿：R<60, G>40, B>20, B<70, G<=B+20 (筒子的暗蓝绿圆圈)
+        var totalColor=0;  // 总非白色像素
+
+        for(var yy=handY1;yy<=handY2;yy++){
+            for(var xx=x1;xx<x2;xx++){
+                var idx=(yy*w+xx)*4;
                 var r=d[idx],g=d[idx+1],b=d[idx+2];
-                if(r>150&&g>150&&b>130)continue; // 白色
-                if(r>120&&g<50&&b<50)pureRed++;   // 万子纯红
-                if(g>60&&r<30&&b<30)pureGreen++;   // 条子纯绿
+                // 跳过白色背景
+                if(r>200&&g>200&&b>190)continue;
+                totalColor++;
+                // 红色像素
+                if(r>100&&g<80&&b<80)redPx++;
+                // 纯绿色像素（条子特征：鲜绿，B值低）
+                if(r<50&&g>50&&b<50&&g>b+20)pureGreen++;
+                // 蓝绿色像素（筒子特征：暗绿/暗蓝，B值较高）
+                if(r<60&&g>40&&g<120&&b>20&&b<70&&g>b&&g<=b+20)blueGreen++;
             }
         }
 
+        if(totalColor<10){log('  Card'+(i+1)+': 颜色太少('+totalColor+')');continue}
+
+        var redPct=redPx/totalColor*100;
+        var pgPct=pureGreen/totalColor*100;
+        var bgPct=blueGreen/totalColor*100;
+        var greenTotal=pgPct+bgPct; // 总绿色系
+
+        // 花色判断逻辑
         var suit,suitIdx;
-        if(pureRed>100&&pureRed>pureGreen*1.5){
+        if(redPct>15&&greenTotal<15){
+            // 主要是红色，几乎没有绿色 -> 万子
             suit='万';suitIdx=0;
-        }else if(pureGreen>150&&pureGreen>pureRed*1.5){
-            suit='条';suitIdx=9;
-        }else if(pureRed<100&&pureGreen<150){
-            suit='筒';suitIdx=18;
-        }else if(pureRed>pureGreen){
-            suit='万';suitIdx=0;
+        }else if(greenTotal>15&&redPct<15){
+            // 主要是绿色，几乎没有红色
+            if(pgPct>bgPct){
+                suit='条';suitIdx=9; // 纯绿为主=条子
+            }else{
+                suit='筒';suitIdx=18; // 蓝绿为主=筒子
+            }
+        }else if(redPct>15&&greenTotal>15){
+            // 混合：红+绿
+            if(pgPct>redPct){
+                suit='条';suitIdx=9; // 纯绿多于红色=条子（如一条：红"一"字+绿竹条）
+            }else if(bgPct>pgPct){
+                suit='筒';suitIdx=18; // 蓝绿多于纯绿=筒子
+            }else{
+                suit='条';suitIdx=9; // 默认条子
+            }
         }else{
-            suit='条';suitIdx=9;
+            // 红和绿都不明显 -> 筒子（暗色圆圈为主）
+            suit='筒';suitIdx=18;
         }
 
-        // 数字识别：基于纯色像素总数粗略映射
-        var total=pureRed+pureGreen;
+        // 数字识别：基于纯色像素数量映射
         var num=5; // 默认中间值
         if(suit==='万'){
-            // 万子的纯红像素数量和数字大小正相关
-            if(pureRed<150)num=1;else if(pureRed<180)num=2;else if(pureRed<210)num=3;
-            else if(pureRed<240)num=4;else if(pureRed<270)num=5;else if(pureRed<300)num=6;
-            else if(pureRed<330)num=7;else if(pureRed<360)num=8;else num=9;
+            if(redPx<150)num=1;else if(redPx<180)num=2;else if(redPx<210)num=3;
+            else if(redPx<240)num=4;else if(redPx<270)num=5;else if(redPx<300)num=6;
+            else if(redPx<330)num=7;else if(redPx<360)num=8;else num=9;
         }else if(suit==='条'){
             if(pureGreen<200)num=1;else if(pureGreen<260)num=2;else if(pureGreen<320)num=3;
             else if(pureGreen<380)num=4;else if(pureGreen<440)num=5;else if(pureGreen<500)num=6;
             else if(pureGreen<560)num=7;else if(pureGreen<620)num=8;else num=9;
         }else{
-            // 筒子没有纯色像素，用总有色像素估算
-            // 暂时用牌宽度估算（宽牌=大数字更多圆圈）
-            var tileArea=t.w*tileHH;
-            if(t.w<25)num=1;else if(t.w<30)num=2;else if(t.w<35)num=3;
-            else if(t.w<40)num=4;else if(t.w<45)num=5;else if(t.w<50)num=6;
-            else if(t.w<55)num=7;else if(t.w<60)num=8;else num=9;
+            // 筒子：用蓝绿像素+红色像素+总颜色像素估算
+            var totalPx=redPx+pureGreen+blueGreen;
+            if(totalPx<80)num=1;else if(totalPx<120)num=2;else if(totalPx<160)num=3;
+            else if(totalPx<200)num=4;else if(totalPx<250)num=5;else if(totalPx<300)num=6;
+            else if(totalPx<350)num=7;else if(totalPx<400)num=8;else num=9;
         }
 
-        var idx=suitIdx+(num-1);
-        if(idx>=0&&idx<27){
-            results.push(idx);
-            log('  '+TN[num-1]+suit+' 红='+pureRed+' 绿='+pureGreen+' w='+t.w);
+        var tileIdx=suitIdx+(num-1);
+        if(tileIdx>=0&&tileIdx<27){
+            results.push(tileIdx);
+            log('  '+(i+1)+': '+TN[num-1]+suit+' R='+redPct.toFixed(0)+'% PG='+pgPct.toFixed(0)+'% BG='+bgPct.toFixed(0)+'%');
         }
     }
+
+    if(results.length===0)return[];
 
     // 多帧投票
     frameResults.push(results);
@@ -500,7 +551,7 @@ function updateMissing(){
 function selectTile(idx){if(selectedTile===idx)confirmDiscard();else{selectedTile=idx;document.getElementById('btnDiscard').disabled=false;updateHandDisplay()}}
 function confirmDiscard(){if(selectedTile<0)return;hand[selectedTile]--;discards[selectedTile]++;totalDiscarded++;selectedTile=-1;document.getElementById('btnDiscard').disabled=true;updateDiscardDisplay();updatePredictions();updateDisplay()}
 function newRound(){
-    hand=new Array(27).fill(0);selectedTile=-1;totalDiscarded=0;thrownChick=false;frameResults=[];discards=new Array(27).fill(0);handSize=0;debugLines=[];
+    hand=new Array(27).fill(0);selectedTile=-1;totalDiscarded=0;thrownChick=false;frameResults=[];discards=new Array(27).fill(0);handSize=0;debugLines=[];lastGoodResult=null;
     document.getElementById('btnDiscard').disabled=true;document.getElementById('btnPeng').style.display='none';document.getElementById('btnGang').style.display='none';
     document.getElementById('alertHu').className='alert-bar hu';document.getElementById('alertPeng').className='alert-bar peng';document.getElementById('alertGang').className='alert-bar gang';
     document.getElementById('ocrRow').innerHTML='';document.getElementById('debugPanel').innerHTML='';document.getElementById('predictSection').style.display='none';
@@ -580,7 +631,7 @@ function calcXT(tiles){
 function findTing(tiles){var list=[];for(var i=0;i<27;i++){if(tiles[i]>=4)continue;var test=tiles.slice();test[i]++;if(calcXT(test)===-1)list.push(i)}return list}
 function countJZ(tiles,curXT){var count=0;for(var i=0;i<27;i++){if(tiles[i]>=4)continue;var test=tiles.slice();test[i]++;if(calcXT(test)<curXT)count+=getRem(i)}return count}
 
-log('🀄 v14 已加载');
+log('🀄 v15 已加载');
 updateDiscardDisplay();
 window.addEventListener('load',function(){updateDisplay()});
 </script>
