@@ -31,20 +31,20 @@ jobs:
         
     - name: Rename APK
       run: |
-        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v221.apk
+        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v222.apk
         
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
-        path: app/build/outputs/apk/debug/mjhelper_v221.apk
+        path: app/build/outputs/apk/debug/mjhelper_v222.apk
     
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v22.1
-        name: "V22.1 修复竖屏截屏旋转+归一化坐标"
-        body: "V22.1: 🐛★关键修复★ MediaProjection截屏是竖屏(832x1758),游戏内容旋转90°导致手牌过滤为0! 修复:检测竖屏截图自动顺时针旋转90°变横屏再处理. 归一化坐标BUG同步修复(*640)"
-        files: app/build/outputs/apk/debug/mjhelper_v221.apk
+        tag_name: v22.2
+        name: "V22.2 修复ONNX输出格式选择BUG"
+        body: "V22.2: 修复ONNX输出格式选择BUG - 用tensor shape确定格式不再盲猜选多。旧BUG: [39,8400]数据被[8400,39]错读→更多假阳性被选中→垃圾bbox→0手牌"
+        files: app/build/outputs/apk/debug/mjhelper_v222.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
