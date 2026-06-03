@@ -103,8 +103,7 @@ class ScreenCaptureService : Service() {
             
             mediaProjection?.registerCallback(object : MediaProjection.Callback() {
                 override fun onStop() {
-                    lastError = "MediaProjection被停止"
-                    isRunning = false
+                    lastError = "MediaProjection被停止(可能需要重新授权)"
                 }
             }, handler)
 
@@ -207,28 +206,34 @@ class ScreenCaptureService : Service() {
 
                 // If orientation mismatch, recreate VirtualDisplay with correct dimensions
                 if (isRealLandscape != isCaptureLandscape) {
-                    try { virtualDisplay?.release() } catch (_: Exception) {}
-                    try { imageReader?.close() } catch (_: Exception) {}
+                    try {
+                        try { virtualDisplay?.release() } catch (_: Exception) {}
+                        try { imageReader?.close() } catch (_: Exception) {}
 
-                    screenWidth = realW * 3 / 4
-                    screenHeight = realH * 3 / 4
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        screenDensity = wm.currentWindowMetrics.density.toInt() * 3 / 4
-                    } else {
-                        val m = DisplayMetrics()
-                        @Suppress("DEPRECATION")
-                        wm.defaultDisplay.getRealMetrics(m)
-                        screenDensity = m.densityDpi * 3 / 4
+                        screenWidth = realW * 3 / 4
+                        screenHeight = realH * 3 / 4
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            screenDensity = wm.currentWindowMetrics.density.toInt() * 3 / 4
+                        } else {
+                            val m = DisplayMetrics()
+                            @Suppress("DEPRECATION")
+                            wm.defaultDisplay.getRealMetrics(m)
+                            screenDensity = m.densityDpi * 3 / 4
+                        }
+
+                        imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
+                        virtualDisplay = mediaProjection?.createVirtualDisplay(
+                            "MJScreenCapture",
+                            screenWidth, screenHeight, screenDensity,
+                            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                            imageReader?.surface,
+                            null, null
+                        )
+                        lastError = "旋转重建VD ${screenWidth}x${screenHeight}"
+                    } catch (re: Exception) {
+                        lastError = "旋转重建失败: ${re.message}"
+                        // Don't stop the service, just keep trying with old dimensions
                     }
-
-                    imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
-                    virtualDisplay = mediaProjection?.createVirtualDisplay(
-                        "MJScreenCapture",
-                        screenWidth, screenHeight, screenDensity,
-                        DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                        imageReader?.surface,
-                        null, null
-                    )
                     bitmap.recycle()
                     return // Skip this frame, next one will be correct orientation
                 }
@@ -251,6 +256,7 @@ class ScreenCaptureService : Service() {
         } catch (e: Exception) {
             consecutiveFails++
             lastError = "截屏错误: ${e.message}"
+            // Don't set isRunning=false, keep trying
         }
     }
 
