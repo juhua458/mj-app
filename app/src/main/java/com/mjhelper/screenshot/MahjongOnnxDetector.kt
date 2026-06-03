@@ -2,6 +2,8 @@ package com.mjhelper.screenshot
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
@@ -12,10 +14,14 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * ONNX Runtime 麻将牌识别引擎 v3
- * 使用 YOLO11n nano模型，输入640x640，输出35类麻将牌
+ * ONNX Runtime 麻将牌识别引擎 v4
  * 
- * v3改进: 先CPU加载保证成功，再尝试NNAPI加速；暴露lastError供调试
+ * v4改进:
+ * 1. Letterbox预处理(保持宽高比+灰色填充), 与YOLO训练一致
+ * 2. FloatBuffer解析输出tensor, 不依赖类型转换
+ * 3. 支持截图裁剪(去掉helper面板区域)
+ * 4. 降低默认置信度阈值
+ * 5. 暴露lastDebug调试信息
  */
 class MahjongOnnxDetector(context: Context) {
     
@@ -25,6 +31,8 @@ class MahjongOnnxDetector(context: Context) {
     var lastError: String = ""
         private set
     var useNNAPI: Boolean = false
+        private set
+    var lastDebug: String = ""
         private set
     
     // 麻将牌类别名称
@@ -57,6 +65,7 @@ class MahjongOnnxDetector(context: Context) {
     
     fun loadModel(inputStream: InputStream): Boolean {
         lastError = ""
+        lastDebug = ""
         
         // 先关闭旧session
         try { session?.close() } catch (_: Exception) {}
@@ -78,6 +87,8 @@ class MahjongOnnxDetector(context: Context) {
             lastError = "模型文件为空(0字节)"
             return false
         }
+        
+        lastDebug = "modelBytes=${modelBytes.size}"
         
         // 策略1: 先用纯CPU加载（保证成功）
         try {
@@ -121,14 +132,12 @@ class MahjongOnnxDetector(context: Context) {
             nnapiOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             nnapiOptions.addNnapi()
             val nnapiSession = env?.createSession(modelBytes, nnapiOptions)
-            // 成功则替换
             session?.close()
             session = nnapiSession
             useNNAPI = true
             nnapiOptions.close()
             return true
         } catch (e: Exception) {
-            // NNAPI不可用，继续用CPU
             return false
         }
     }
@@ -147,45 +156,106 @@ class MahjongOnnxDetector(context: Context) {
         val handTiles: List<Detection>,
         val allDetections: List<Detection>,
         val handTileNames: List<String>,
-        val confidence: Float
+        val confidence: Float,
+        val debugInfo: String
     )
+    
+    /**
+     * Letterbox预处理: 保持宽高比缩放到640x640, 短边灰色填充
+     * 与YOLO训练时的预处理一致
+     */
+    private fun letterboxResize(bitmap: Bitmap, targetSize: Int): Pair<Bitmap, FloatArray> {
+        val w = bitmap.width
+        val h = bitmap.height
+        val scale = minOf(targetSize.toFloat() / w, targetSize.toFloat() / h)
+        val newW = (w * scale).toInt()
+        val newH = (h * scale).toInt()
+        
+        val resized = Bitmap.createScaledBitmap(bitmap, newW, newH, true)
+        
+        val result = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(result)
+        canvas.drawColor(Color.rgb(114, 114, 114)) // YOLO标准灰色填充
+        val dx = (targetSize - newW) / 2f
+        val dy = (targetSize - newH) / 2f
+        canvas.drawBitmap(resized, dx, dy, null)
+        resized.recycle()
+        
+        // 返回letterbox参数: [scale, padX, padY]
+        return Pair(result, floatArrayOf(scale, dx, dy))
+    }
     
     fun recognize(
         bitmap: Bitmap, 
-        handRegionY1: Float = 0.75f,
-        handRegionY2: Float = 0.95f,
-        confThreshold: Float = 0.35f
+        handRegionY1: Float = 0.70f,
+        handRegionY2: Float = 1.0f,
+        confThreshold: Float = 0.15f,
+        cropRight: Int = 0  // 从右侧裁掉的像素数(helper面板宽度)
     ): RecognitionResult? {
         if (!isLoaded || session == null || env == null) return null
         
         return try {
-            val resized = Bitmap.createScaledBitmap(bitmap, 640, 640, true)
-            val input = preprocess(resized)
-            resized.recycle()
+            // 1. 裁剪掉右侧helper面板区域
+            val cropWidth = if (cropRight > 0 && cropRight < bitmap.width) {
+                bitmap.width - cropRight
+            } else {
+                bitmap.width
+            }
+            val croppedBitmap = if (cropWidth < bitmap.width) {
+                Bitmap.createBitmap(bitmap, 0, 0, cropWidth, bitmap.height)
+            } else {
+                bitmap
+            }
             
+            val origW = croppedBitmap.width.toFloat()
+            val origH = croppedBitmap.height.toFloat()
+            
+            // 2. Letterbox预处理
+            val (letterboxed, letterboxParams) = letterboxResize(croppedBitmap, 640)
+            if (croppedBitmap !== bitmap) croppedBitmap.recycle()
+            
+            val scale = letterboxParams[0]
+            val padX = letterboxParams[1]
+            val padY = letterboxParams[2]
+            
+            // 3. 预处理像素数据
+            val input = preprocess(letterboxed)
+            letterboxed.recycle()
+            
+            // 4. ONNX推理
             val inputName = session?.inputNames?.iterator()?.next() ?: return null
             val inputBuffer = FloatBuffer.wrap(input)
             val inputTensor = OnnxTensor.createTensor(env, inputBuffer, longArrayOf(1, 3, 640, 640))
             val output = session?.run(mapOf(inputName to inputTensor))
             inputTensor.close()
             
-            val outputTensor = output?.get(0) ?: return null
-            val detections = postprocessAuto(outputTensor, bitmap.width, bitmap.height, confThreshold)
+            val outputValue = output?.get(0) ?: return null
             
-            val imgH = bitmap.height.toFloat()
-            val handY1 = imgH * handRegionY1
-            val handY2 = imgH * handRegionY2
+            // 5. 后处理(FloatBuffer方式, 可靠解析)
+            val rawDetections = postprocessFloatBuffer(outputValue, origW, origH, scale, padX, padY, confThreshold)
+            
+            lastDebug = "crop=${cropWidth}x${bitmap.height} letterbox_scale=${"%.3f".format(scale)} raw_dets=${rawDetections.size}"
+            
+            // 6. NMS
+            val detections = nms(rawDetections, 0.45f)
+            
+            // 7. 手牌区域过滤(基于原始裁剪后图片坐标)
+            val handY1 = origH * handRegionY1
+            val handY2 = origH * handRegionY2
             
             val handTiles = detections.filter { 
-                it.y1 >= handY1 && it.y2 <= imgH * 1.05f
+                it.centerY >= handY1 && it.y1 >= handY1 * 0.9f
             }.sortedBy { it.centerX }
             
             val allNames = handTiles.map { it.shortName }
             val avgConf = if (handTiles.isNotEmpty()) handTiles.map { it.confidence }.average().toFloat() else 0f
             
-            RecognitionResult(handTiles, detections, allNames, avgConf)
+            val debugStr = "$lastDebug | afterNMS=${detections.size} handY=${"%.0f".format(handY1)}-${"%.0f".format(handY2)} hand=${handTiles.size}"
+            
+            RecognitionResult(handTiles, detections, allNames, avgConf, debugStr)
         } catch (e: Exception) {
             lastError = "识别异常: ${e.message}"
+            lastDebug = "exception: ${e.message}"
             null
         }
     }
@@ -204,66 +274,99 @@ class MahjongOnnxDetector(context: Context) {
         return floatArray
     }
     
-    private fun postprocessAuto(
+    /**
+     * 使用FloatBuffer解析ONNX输出, 不依赖类型转换
+     * 支持 [1, 39, 8400] 和 [1, 8400, 39] 两种格式
+     */
+    private fun postprocessFloatBuffer(
         outputValue: OnnxValue,
-        origW: Int, origH: Int,
+        origW: Float, origH: Float,
+        scale: Float, padX: Float, padY: Float,
         confThreshold: Float
     ): List<Detection> {
-        val detections = mutableListOf<Detection>()
         val numClasses = 35
+        val detections = mutableListOf<Detection>()
+        
+        // 尝试获取FloatBuffer
+        val tensor = outputValue as? OnnxTensor
+        if (tensor == null) {
+            lastDebug = "output_not_OnnxTensor: ${outputValue.javaClass.simpleName}"
+            return detections
+        }
+        
+        val buffer = try {
+            tensor.floatBuffer
+        } catch (e: Exception) {
+            lastDebug = "floatBuffer_failed: ${e.message}"
+            return detections
+        }
+        
+        buffer.rewind()
+        val totalElements = buffer.remaining()
+        
+        // 获取shape信息(如果可用)
+        val shapeStr = try {
+            tensor.info.shape.joinToString(",")
+        } catch (e: Exception) {
+            "unknown"
+        }
+        
+        lastDebug = "tensor_shape=[$shapeStr] elements=$totalElements"
+        
+        val data = FloatArray(totalElements)
+        buffer.get(data)
+        
+        // 期望总元素数: 39 * 8400 = 327600
+        val expectedSize = (4 + numClasses) * 8400
+        if (totalElements != expectedSize) {
+            lastDebug += " unexpected_size! expected=$expectedSize"
+            // 尝试继续处理
+        }
         
         val d1 = mutableListOf<Detection>()
         val d2 = mutableListOf<Detection>()
         
-        // 尝试1: 3D格式
+        // 格式1: [39, 8400] 按行优先
+        // data[c * 8400 + a] = value at [c][a]
         try {
-            val data3d = (outputValue.value as? Array<Array<FloatArray>>)?.getOrNull(0)
-            if (data3d != null && data3d.isNotEmpty()) {
-                if (data3d.size == 39) {
-                    parseOutput39x8400(data3d, origW, origH, confThreshold, numClasses, d1)
-                } else if (data3d.size == 8400) {
-                    parseOutput8400x39(data3d, origW, origH, confThreshold, numClasses, d1)
-                } else {
-                    try { parseOutput39x8400(data3d, origW, origH, confThreshold, numClasses, d1) } catch (_: Exception) {}
-                    try { parseOutput8400x39(data3d, origW, origH, confThreshold, numClasses, d2) } catch (_: Exception) {}
-                }
-            }
-        } catch (_: Exception) {}
-        
-        // 尝试2: 2D格式
-        if (d1.isEmpty() && d2.isEmpty()) {
-            try {
-                val data2d = outputValue.value as? Array<FloatArray>
-                if (data2d != null) {
-                    if (data2d.size == 39) {
-                        parseOutput39x8400_2d(data2d, origW, origH, confThreshold, numClasses, d1)
-                    } else if (data2d.size == 8400) {
-                        parseOutput8400x39_2d(data2d, origW, origH, confThreshold, numClasses, d1)
-                    }
-                }
-            } catch (_: Exception) {}
+            parseFlat39x8400(data, 8400, origW, origH, scale, padX, padY, confThreshold, numClasses, d1)
+        } catch (e: Exception) {
+            lastDebug += " fmt1_err:${e.message}"
         }
+        
+        // 格式2: [8400, 39] 按行优先
+        // data[a * 39 + v] = value at [a][v]
+        try {
+            parseFlat8400x39(data, 39, origW, origH, scale, padX, padY, confThreshold, numClasses, d2)
+        } catch (e: Exception) {
+            lastDebug += " fmt2_err:${e.message}"
+        }
+        
+        lastDebug += " fmt1=${d1.size} fmt2=${d2.size}"
         
         detections.addAll(if (d1.size >= d2.size) d1 else d2)
-        
-        return nms(detections, 0.45f)
+        return detections
     }
     
-    private fun parseOutput39x8400(
-        data: Array<FloatArray>, 
-        origW: Int, origH: Int, 
+    /**
+     * 解析 [39, 8400] 格式
+     * data[c * numAnchors + a]: 第c个通道的第a个anchor
+     */
+    private fun parseFlat39x8400(
+        data: FloatArray, numAnchors: Int,
+        origW: Float, origH: Float,
+        scale: Float, padX: Float, padY: Float,
         confThreshold: Float, numClasses: Int,
         detections: MutableList<Detection>
     ) {
-        val numAnchors = data[0].size
-        val scaleX = origW / 640.0f
-        val scaleY = origH / 640.0f
-        
-        for (i in 0 until numAnchors) {
+        for (a in 0 until numAnchors) {
+            // 找最大类别分数
             var maxClassScore = 0f
             var maxClassId = 0
             for (c in 0 until numClasses) {
-                val score = data[4 + c][i]
+                val idx = (4 + c) * numAnchors + a
+                if (idx >= data.size) break
+                val score = data[idx]
                 if (score > maxClassScore) {
                     maxClassScore = score
                     maxClassId = c
@@ -271,39 +374,61 @@ class MahjongOnnxDetector(context: Context) {
             }
             if (maxClassScore < confThreshold) continue
             
-            val cx = data[0][i] * scaleX
-            val cy = data[1][i] * scaleY
-            val w = data[2][i] * scaleX
-            val h = data[3][i] * scaleY
+            // bbox (在letterbox 640x640空间)
+            val cxIdx = 0 * numAnchors + a
+            val cyIdx = 1 * numAnchors + a
+            val wIdx = 2 * numAnchors + a
+            val hIdx = 3 * numAnchors + a
+            if (cxIdx >= data.size || cyIdx >= data.size || wIdx >= data.size || hIdx >= data.size) continue
+            
+            val cx640 = data[cxIdx]
+            val cy640 = data[cyIdx]
+            val w640 = data[wIdx]
+            val h640 = data[hIdx]
+            
+            // 从letterbox空间转换到原始图片空间
+            val cxOrig = (cx640 - padX) / scale
+            val cyOrig = (cy640 - padY) / scale
+            val wOrig = w640 / scale
+            val hOrig = h640 / scale
+            
+            // 过滤无效检测(超出图片范围)
+            if (cxOrig < 0 || cyOrig < 0 || cxOrig > origW || cyOrig > origH) continue
+            if (wOrig <= 0 || hOrig <= 0 || wOrig > origW || hOrig > origH) continue
             
             detections.add(Detection(
                 classId = maxClassId,
                 className = classNames[maxClassId] ?: "?",
                 shortName = shortNames[maxClassId] ?: "?",
                 confidence = maxClassScore,
-                x1 = cx - w / 2, y1 = cy - h / 2,
-                x2 = cx + w / 2, y2 = cy + h / 2,
-                centerX = cx
+                x1 = cxOrig - wOrig / 2, y1 = cyOrig - hOrig / 2,
+                x2 = cxOrig + wOrig / 2, y2 = cyOrig + hOrig / 2,
+                centerX = cxOrig
             ))
         }
     }
     
-    private fun parseOutput8400x39(
-        data: Array<FloatArray>,
-        origW: Int, origH: Int,
+    /**
+     * 解析 [8400, 39] 格式
+     * data[a * 39 + v]: 第a个anchor的第v个值
+     */
+    private fun parseFlat8400x39(
+        data: FloatArray, numValues: Int,
+        origW: Float, origH: Float,
+        scale: Float, padX: Float, padY: Float,
         confThreshold: Float, numClasses: Int,
         detections: MutableList<Detection>
     ) {
-        val numAnchors = data.size
-        val scaleX = origW / 640.0f
-        val scaleY = origH / 640.0f
-        
-        for (i in 0 until numAnchors) {
-            if (data[i].size < 39) continue
+        val numAnchors = data.size / numValues
+        for (a in 0 until numAnchors) {
+            val base = a * numValues
+            if (base + numValues > data.size) break
+            
+            // 找最大类别分数
             var maxClassScore = 0f
             var maxClassId = 0
             for (c in 0 until numClasses) {
-                val score = data[i][4 + c]
+                val score = data[base + 4 + c]
                 if (score > maxClassScore) {
                     maxClassScore = score
                     maxClassId = c
@@ -311,100 +436,30 @@ class MahjongOnnxDetector(context: Context) {
             }
             if (maxClassScore < confThreshold) continue
             
-            val cx = data[i][0] * scaleX
-            val cy = data[i][1] * scaleY
-            val w = data[i][2] * scaleX
-            val h = data[i][3] * scaleY
+            // bbox (在letterbox 640x640空间)
+            val cx640 = data[base + 0]
+            val cy640 = data[base + 1]
+            val w640 = data[base + 2]
+            val h640 = data[base + 3]
+            
+            // 从letterbox空间转换到原始图片空间
+            val cxOrig = (cx640 - padX) / scale
+            val cyOrig = (cy640 - padY) / scale
+            val wOrig = w640 / scale
+            val hOrig = h640 / scale
+            
+            // 过滤无效检测
+            if (cxOrig < 0 || cyOrig < 0 || cxOrig > origW || cyOrig > origH) continue
+            if (wOrig <= 0 || hOrig <= 0 || wOrig > origW || hOrig > origH) continue
             
             detections.add(Detection(
                 classId = maxClassId,
                 className = classNames[maxClassId] ?: "?",
                 shortName = shortNames[maxClassId] ?: "?",
                 confidence = maxClassScore,
-                x1 = cx - w / 2, y1 = cy - h / 2,
-                x2 = cx + w / 2, y2 = cy + h / 2,
-                centerX = cx
-            ))
-        }
-    }
-    
-    private fun parseOutput39x8400_2d(
-        data: Array<FloatArray>,
-        origW: Int, origH: Int,
-        confThreshold: Float, numClasses: Int,
-        detections: MutableList<Detection>
-    ) {
-        if (data.isEmpty()) return
-        val numAnchors = data[0].size
-        val scaleX = origW / 640.0f
-        val scaleY = origH / 640.0f
-        
-        for (i in 0 until numAnchors) {
-            var maxClassScore = 0f
-            var maxClassId = 0
-            for (c in 0 until numClasses) {
-                if (4 + c >= data.size) break
-                val score = data[4 + c][i]
-                if (score > maxClassScore) {
-                    maxClassScore = score
-                    maxClassId = c
-                }
-            }
-            if (maxClassScore < confThreshold) continue
-            
-            val cx = data[0][i] * scaleX
-            val cy = data[1][i] * scaleY
-            val w = data[2][i] * scaleX
-            val h = data[3][i] * scaleY
-            
-            detections.add(Detection(
-                classId = maxClassId,
-                className = classNames[maxClassId] ?: "?",
-                shortName = shortNames[maxClassId] ?: "?",
-                confidence = maxClassScore,
-                x1 = cx - w / 2, y1 = cy - h / 2,
-                x2 = cx + w / 2, y2 = cy + h / 2,
-                centerX = cx
-            ))
-        }
-    }
-    
-    private fun parseOutput8400x39_2d(
-        data: Array<FloatArray>,
-        origW: Int, origH: Int,
-        confThreshold: Float, numClasses: Int,
-        detections: MutableList<Detection>
-    ) {
-        val numAnchors = data.size
-        val scaleX = origW / 640.0f
-        val scaleY = origH / 640.0f
-        
-        for (i in 0 until numAnchors) {
-            if (data[i].size < 39) continue
-            var maxClassScore = 0f
-            var maxClassId = 0
-            for (c in 0 until numClasses) {
-                val score = data[i][4 + c]
-                if (score > maxClassScore) {
-                    maxClassScore = score
-                    maxClassId = c
-                }
-            }
-            if (maxClassScore < confThreshold) continue
-            
-            val cx = data[i][0] * scaleX
-            val cy = data[i][1] * scaleY
-            val w = data[i][2] * scaleX
-            val h = data[i][3] * scaleY
-            
-            detections.add(Detection(
-                classId = maxClassId,
-                className = classNames[maxClassId] ?: "?",
-                shortName = shortNames[maxClassId] ?: "?",
-                confidence = maxClassScore,
-                x1 = cx - w / 2, y1 = cy - h / 2,
-                x2 = cx + w / 2, y2 = cy + h / 2,
-                centerX = cx
+                x1 = cxOrig - wOrig / 2, y1 = cyOrig - hOrig / 2,
+                x2 = cxOrig + wOrig / 2, y2 = cyOrig + hOrig / 2,
+                centerX = cxOrig
             ))
         }
     }

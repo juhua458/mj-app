@@ -31,18 +31,21 @@ class FloatingService : Service() {
 
     companion object {
         var isRunning = false
+        var currentPanelWidth: Int = 0    // 供HttpServerService读取, 用于截屏裁剪
+        var currentPanelHeight: Int = 0
         private const val CHANNEL_ID = "mj_floating"
         private const val NOTIFICATION_ID = 2
         private const val PREFS_NAME = "mj_floating_prefs"
         private const val KEY_LANDSCAPE_WIDTH = "landscape_width"
-        private const val KEY_PORTRAIT_WIDTH = "portrait_width"
+        private const val KEY_LANDSCAPE_HEIGHT_RATIO = "landscape_height_ratio"
     }
 
     private var windowManager: WindowManager? = null
     private var floatingView: View? = null
     private var webView: WebView? = null
     private var tvStatus: TextView? = null
-    private var resizeHandle: View? = null
+    private var resizeHandleLeft: View? = null
+    private var resizeHandleBottom: View? = null
     private val handler = Handler(Looper.getMainLooper())
     private var isExpanded = true
     private var prefs: SharedPreferences? = null
@@ -73,6 +76,8 @@ class FloatingService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        currentPanelWidth = 0
+        currentPanelHeight = 0
         handler.removeCallbacksAndMessages(null)
         try {
             webView?.destroy()
@@ -113,12 +118,12 @@ class FloatingService : Service() {
         prefs?.edit()?.putInt(KEY_LANDSCAPE_WIDTH, width)?.apply()
     }
 
-    private fun getSavedPortraitWidth(): Int {
-        return prefs?.getInt(KEY_PORTRAIT_WIDTH, -1) ?: -1
+    private fun getSavedHeightRatio(): Float {
+        return prefs?.getFloat(KEY_LANDSCAPE_HEIGHT_RATIO, 0.60f) ?: 0.60f
     }
 
-    private fun savePortraitWidth(width: Int) {
-        prefs?.edit()?.putInt(KEY_PORTRAIT_WIDTH, width)?.apply()
+    private fun saveHeightRatio(ratio: Float) {
+        prefs?.edit()?.putFloat(KEY_LANDSCAPE_HEIGHT_RATIO, ratio)?.apply()
     }
 
     private fun resizeFloatingWindow() {
@@ -134,29 +139,48 @@ class FloatingService : Service() {
     private fun applyWindowSize(params: WindowManager.LayoutParams, screenWidth: Int, screenHeight: Int, isLandscape: Boolean) {
         if (isExpanded) {
             if (isLandscape) {
-                // 横屏: 右侧面板, 用户可拖拽调整宽度
+                // 横屏: 右侧面板
                 val savedW = getSavedLandscapeWidth()
                 params.width = if (savedW > 0) savedW else (screenWidth * 0.25).toInt().coerceIn(350, 700)
-                params.height = screenHeight
+                
+                // 高度: 默认60%屏幕高度, 底部留空给碰杠胡
+                val heightRatio = getSavedHeightRatio()
+                params.height = (screenHeight * heightRatio).toInt().coerceIn(screenHeight / 3, screenHeight - 150)
+                
                 params.gravity = Gravity.END or Gravity.TOP
                 params.x = 0
                 params.y = 0
-                // 显示resize手柄
-                resizeHandle?.visibility = View.VISIBLE
+                
+                // 更新全局面板尺寸
+                currentPanelWidth = params.width
+                currentPanelHeight = params.height
+                
+                resizeHandleLeft?.visibility = View.VISIBLE
+                resizeHandleBottom?.visibility = View.VISIBLE
             } else {
                 // 竖屏: 顶部卡片
-                val savedW = getSavedPortraitWidth()
+                val savedW = getSavedLandscapeWidth()
                 params.width = if (savedW > 0) savedW else (screenWidth * 0.8).toInt()
                 params.height = (params.width * 1.0).toInt()
                 params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
                 params.x = 0
                 params.y = 40
-                resizeHandle?.visibility = View.GONE
+                
+                currentPanelWidth = 0
+                currentPanelHeight = 0
+                
+                resizeHandleLeft?.visibility = View.GONE
+                resizeHandleBottom?.visibility = View.GONE
             }
         } else {
             params.width = if (isLandscape) 140 else (screenWidth * 0.4).toInt()
             params.height = WindowManager.LayoutParams.WRAP_CONTENT
-            resizeHandle?.visibility = View.GONE
+            
+            currentPanelWidth = 0
+            currentPanelHeight = 0
+            
+            resizeHandleLeft?.visibility = View.GONE
+            resizeHandleBottom?.visibility = View.GONE
         }
     }
 
@@ -169,22 +193,8 @@ class FloatingService : Service() {
 
         // Container
         val container = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(0xEE0a0e1a.toInt())
-        }
-
-        // Resize handle (左侧拖拽条)
-        resizeHandle = View(this).apply {
-            setBackgroundColor(0x40FFFFFF.toInt()) // 半透明白色
-            setOnTouchListener(ResizeTouchListener())
-        }
-        val resizeParams = LinearLayout.LayoutParams(16, LinearLayout.LayoutParams.MATCH_PARENT)
-        container.addView(resizeHandle, resizeParams)
-
-        // Content container (vertical)
-        val contentContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            setBackgroundColor(0xEE0a0e1a.toInt())
         }
 
         // Top drag bar
@@ -196,7 +206,7 @@ class FloatingService : Service() {
         }
 
         tvStatus = TextView(this).apply {
-            text = "🀄 v20.0 YOLO"
+            text = "🀄 v21.0 YOLO"
             setTextColor(0xFFe8edf5.toInt())
             textSize = 13f
             setPadding(8, 4, 8, 4)
@@ -212,24 +222,45 @@ class FloatingService : Service() {
 
         topBar.addView(tvStatus, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         topBar.addView(tvCollapse)
-        contentContainer.addView(topBar)
+        container.addView(topBar)
+
+        // Content area (middle - contains webView and left resize handle)
+        val contentRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+
+        // Left resize handle (拖拽调宽度)
+        resizeHandleLeft = View(this).apply {
+            setBackgroundColor(0x40FFFFFF.toInt())
+            setOnTouchListener(ResizeWidthTouchListener())
+        }
+        val leftHandleParams = LinearLayout.LayoutParams(16, LinearLayout.LayoutParams.MATCH_PARENT)
+        contentRow.addView(resizeHandleLeft, leftHandleParams)
 
         // WebView
         val wv = WebView(this)
         webView = wv
         val wvParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
             0,
+            LinearLayout.LayoutParams.MATCH_PARENT,
             1f
         )
-        contentContainer.addView(wv, wvParams)
+        contentRow.addView(wv, wvParams)
 
-        val contentParams = LinearLayout.LayoutParams(
-            0,
+        val contentRowParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
             1f
         )
-        container.addView(contentContainer, contentParams)
+        container.addView(contentRow, contentRowParams)
+
+        // Bottom resize handle (拖拽调高度)
+        resizeHandleBottom = View(this).apply {
+            setBackgroundColor(0x40FFFFFF.toInt())
+            setOnTouchListener(ResizeHeightTouchListener())
+        }
+        val bottomHandleParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 16)
+        container.addView(resizeHandleBottom, bottomHandleParams)
 
         wv.settings.apply {
             javaScriptEnabled = true
@@ -306,9 +337,9 @@ class FloatingService : Service() {
     }
 
     /**
-     * 左侧拖拽条 — 拖拽改变面板宽度
+     * 左侧拖拽条 — 改变面板宽度
      */
-    private inner class ResizeTouchListener : View.OnTouchListener {
+    private inner class ResizeWidthTouchListener : View.OnTouchListener {
         private var startWidth = 0
         private var startTouchX = 0f
 
@@ -329,14 +360,56 @@ class FloatingService : Service() {
                     val dx = startTouchX - event.rawX // 向左拖=加宽
                     val newWidth = (startWidth + dx.toInt()).coerceIn(280, screenWidth - 200)
                     params.width = newWidth
+                    currentPanelWidth = newWidth
                     try {
                         windowManager?.updateViewLayout(floatingView, params)
                     } catch (_: Exception) {}
                     return true
                 }
                 MotionEvent.ACTION_UP -> {
-                    // 保存用户偏好宽度
                     saveLandscapeWidth(params.width)
+                    currentPanelWidth = params.width
+                    return true
+                }
+            }
+            return false
+        }
+    }
+
+    /**
+     * 底部拖拽条 — 改变面板高度
+     */
+    private inner class ResizeHeightTouchListener : View.OnTouchListener {
+        private var startHeight = 0
+        private var startTouchY = 0f
+
+        @SuppressLint("ClickableViewAccessibility")
+        override fun onTouch(v: View?, event: MotionEvent): Boolean {
+            val params = floatingView?.layoutParams as? WindowManager.LayoutParams ?: return false
+            val (screenWidth, screenHeight) = getScreenSize()
+            val isLandscape = screenWidth > screenHeight
+            if (!isLandscape) return false
+
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    startHeight = params.height
+                    startTouchY = event.rawY
+                    return true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dy = event.rawY - startTouchY // 向下拖=加高
+                    val newHeight = (startHeight + dy.toInt()).coerceIn(screenHeight / 3, screenHeight - 150)
+                    params.height = newHeight
+                    currentPanelHeight = newHeight
+                    try {
+                        windowManager?.updateViewLayout(floatingView, params)
+                    } catch (_: Exception) {}
+                    return true
+                }
+                MotionEvent.ACTION_UP -> {
+                    val ratio = params.height.toFloat() / screenHeight.toFloat()
+                    saveHeightRatio(ratio)
+                    currentPanelHeight = params.height
                     return true
                 }
             }
@@ -347,7 +420,8 @@ class FloatingService : Service() {
     private fun toggleExpand() {
         isExpanded = !isExpanded
         webView?.visibility = if (isExpanded) View.VISIBLE else View.GONE
-        resizeHandle?.visibility = if (isExpanded) View.VISIBLE else View.GONE
+        resizeHandleLeft?.visibility = if (isExpanded && getScreenSize().first > getScreenSize().second) View.VISIBLE else View.GONE
+        resizeHandleBottom?.visibility = if (isExpanded && getScreenSize().first > getScreenSize().second) View.VISIBLE else View.GONE
 
         val (screenWidth, screenHeight) = getScreenSize()
         val isLandscape = screenWidth > screenHeight
@@ -371,7 +445,7 @@ class FloatingService : Service() {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle("🀄 捉鸡麻将提示器")
-                .setContentText("悬浮窗运行中 - 左边缘拖拽调宽度")
+                .setContentText("悬浮窗运行中 - 左右边缘拖拽调宽高")
                 .setSmallIcon(android.R.drawable.ic_menu_compass)
                 .setOngoing(true)
                 .build()

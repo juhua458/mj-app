@@ -56,9 +56,6 @@ class HttpServerService : Service() {
             // CPU加载成功后，尝试NNAPI加速
             if (modelLoaded && modelBytes != null) {
                 val nnapiOk = detector?.tryEnableNNAPI(modelBytes!!) ?: false
-                if (nnapiOk) {
-                    // NNAPI加速成功
-                }
             }
         } catch (e: Exception) {
             modelLoaded = false
@@ -92,7 +89,6 @@ class HttpServerService : Service() {
                 override fun serve(session: IHTTPSession): Response {
                     return when {
                         session.uri == "/" || session.uri == "/helper" || session.uri == "/index.html" -> {
-                            // 每次刷新helper.html（方便调试更新）
                             helperHtml = null
                             val html = loadHelperHtml()
                             newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", html).apply {
@@ -119,63 +115,72 @@ class HttpServerService : Service() {
                             }
                         }
                         session.uri == "/api/recognize" -> {
-                            if (!modelLoaded) {
-                                initDetector()
-                            }
-                            val data = ScreenCaptureService.latestScreenshot
-                            if (data == null) {
-                                newFixedLengthResponse(Response.Status.OK, "application/json", 
-                                    """{"error":"no screenshot","tiles":[],"names":[]}""").apply {
-                                    addHeader("Access-Control-Allow-Origin", "*")
-                                }
-                            } else if (!modelLoaded) {
-                                newFixedLengthResponse(Response.Status.OK, "application/json",
-                                    """{"error":"model not loaded: $modelError","tiles":[],"names":[]}""").apply {
-                                    addHeader("Access-Control-Allow-Origin", "*")
-                                }
-                            } else {
-                                try {
-                                    val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
-                                    val result = detector?.recognize(bitmap)
-                                    bitmap.recycle()
-                                    
-                                    if (result != null) {
-                                        val tilesJson = result.handTiles.joinToString(",") { tile ->
-                                            """{"name":"${tile.className}","short":"${tile.shortName}","conf":${"%.2f".format(tile.confidence)},"x":${tile.centerX.toInt()}}"""
-                                        }
-                                        val json = """{"tiles":[$tilesJson],"names":${result.handTileNames},"avgConf":${"%.2f".format(result.confidence)},"total":${result.allDetections.size}}"""
-                                        newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
-                                            addHeader("Access-Control-Allow-Origin", "*")
-                                            addHeader("Cache-Control", "no-cache, no-store")
-                                        }
-                                    } else {
-                                        val err = detector?.lastError ?: "recognition failed"
-                                        newFixedLengthResponse(Response.Status.OK, "application/json",
-                                            """{"error":"$err","tiles":[],"names":[]}""").apply {
-                                            addHeader("Access-Control-Allow-Origin", "*")
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    newFixedLengthResponse(Response.Status.OK, "application/json",
-                                        """{"error":"${e.message}","tiles":[],"names":[]}""").apply {
-                                        addHeader("Access-Control-Allow-Origin", "*")
-                                    }
-                                }
-                            }
+            if (!modelLoaded) { initDetector() }
+            val data = ScreenCaptureService.latestScreenshot
+            if (data == null) {
+                newFixedLengthResponse(Response.Status.OK, "application/json", 
+                    """{"error":"no screenshot","tiles":[],"names":[],"debug":"no_screenshot"}""").apply {
+                    addHeader("Access-Control-Allow-Origin", "*")
+                }
+            } else if (!modelLoaded) {
+                newFixedLengthResponse(Response.Status.OK, "application/json",
+                    """{"error":"model not loaded: $modelError","tiles":[],"names":[],"debug":"model_not_loaded"}""").apply {
+                    addHeader("Access-Control-Allow-Origin", "*")
+                }
+            } else {
+                try {
+                    val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
+                    val imgW = bitmap.width
+                    val imgH = bitmap.height
+                    
+                    // 获取helper面板宽度用于裁剪
+                    val panelWidth = FloatingService.currentPanelWidth
+                    val isLandscape = imgW > imgH
+                    val cropRight = if (isLandscape && panelWidth > 0) panelWidth else 0
+                    
+                    // 传cropRight给detector, 裁掉helper面板区域
+                    val result = detector?.recognize(bitmap, cropRight = cropRight)
+                    bitmap.recycle()
+                    
+                    if (result != null) {
+                        val tilesJson = result.handTiles.joinToString(",") { tile ->
+                            """{"name":"${tile.className}","short":"${tile.shortName}","conf":${"%.2f".format(tile.confidence)},"x":${tile.centerX.toInt()}}"""
+                        }
+                        val json = """{"tiles":[$tilesJson],"names":${result.handTileNames},"avgConf":${"%.2f".format(result.confidence)},"total":${result.allDetections.size},"debug":"${result.debugInfo}","imgSize":"${imgW}x${imgH}","cropRight":$cropRight}"""
+                        newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
+                            addHeader("Access-Control-Allow-Origin", "*")
+                            addHeader("Cache-Control", "no-cache, no-store")
+                        }
+                    } else {
+                        val err = detector?.lastError ?: "recognition failed"
+                        val dbg = detector?.lastDebug ?: ""
+                        newFixedLengthResponse(Response.Status.OK, "application/json",
+                            """{"error":"$err","tiles":[],"names":[],"debug":"$dbg"}""").apply {
+                            addHeader("Access-Control-Allow-Origin", "*")
+                        }
+                    }
+                } catch (e: Exception) {
+                    newFixedLengthResponse(Response.Status.OK, "application/json",
+                        """{"error":"${e.message}","tiles":[],"names":[],"debug":"exception"}""").apply {
+                        addHeader("Access-Control-Allow-Origin", "*")
+                    }
+                }
+            }
                         }
                         session.uri == "/api/status" -> {
                             val capture = ScreenCaptureService
                             val timeSinceLast = if (capture.lastCaptureTime > 0) 
                                 (System.currentTimeMillis() - capture.lastCaptureTime) / 1000 else -1
                             val nnapi = detector?.useNNAPI ?: false
-                            val json = """{"running":${capture.isRunning},"hasScreenshot":${capture.latestScreenshot != null},"captureCount":${capture.captureCount},"timeSinceLast":${timeSinceLast},"error":"${capture.lastError}","modelLoaded":$modelLoaded,"modelError":"$modelError","nnapi":$nnapi}"""
+                            val dbg = detector?.lastDebug ?: ""
+                            val panelW = FloatingService.currentPanelWidth
+                            val json = """{"running":${capture.isRunning},"hasScreenshot":${capture.latestScreenshot != null},"captureCount":${capture.captureCount},"timeSinceLast":${timeSinceLast},"error":"${capture.lastError}","modelLoaded":$modelLoaded,"modelError":"$modelError","nnapi":$nnapi,"panelWidth":$panelW,"debug":"$dbg"}"""
                             newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
                                 addHeader("Access-Control-Allow-Origin", "*")
                                 addHeader("Cache-Control", "no-cache, no-store")
                             }
                         }
                         session.uri == "/api/reload" -> {
-                            // 重新加载模型
                             Thread {
                                 try { detector?.close() } catch (_: Exception) {}
                                 detector = null
