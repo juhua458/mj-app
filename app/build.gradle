@@ -11,8 +11,8 @@ android {
         applicationId "com.mjhelper.screenshot"
         minSdk 26
         targetSdk 34
-        versionCode 17
-        versionName "17.4"
+        versionCode 18
+        versionName "17.5"
     }
 
     buildTypes {

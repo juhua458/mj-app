@@ -26,7 +26,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="捉鸡麻将提示器 v17.4 悬浮窗版"
+        android:text="捉鸡麻将提示器 v17.5 悬浮窗版"
         android:textSize="13sp"
         android:textColor="#94a3b8"
         android:layout_marginTop="6dp" />
