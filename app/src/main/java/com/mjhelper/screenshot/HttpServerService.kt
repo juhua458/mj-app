@@ -147,13 +147,43 @@ class HttpServerService : Service() {
                         }
                     } else {
                         // Cloud failed, fall back to local
-                        localRecognize(data)
+                        val localResult = localRecognize(data)
+                        if (localResult != null) {
+                            newFixedLengthResponse(Response.Status.OK, "application/json", localResult).apply {
+                                addHeader("Access-Control-Allow-Origin", "*")
+                                addHeader("Cache-Control", "no-cache, no-store")
+                            }
+                        } else {
+                            newFixedLengthResponse(Response.Status.OK, "application/json", """{"error":"both cloud and local failed"}""").apply {
+                                addHeader("Access-Control-Allow-Origin", "*")
+                            }
+                        }
                     }
                 } catch (e: Exception) {
-                    localRecognize(data)
+                    val localResult = localRecognize(data)
+                    if (localResult != null) {
+                        newFixedLengthResponse(Response.Status.OK, "application/json", localResult).apply {
+                            addHeader("Access-Control-Allow-Origin", "*")
+                            addHeader("Cache-Control", "no-cache, no-store")
+                        }
+                    } else {
+                        newFixedLengthResponse(Response.Status.OK, "application/json", """{"error":"both cloud and local failed"}""").apply {
+                            addHeader("Access-Control-Allow-Origin", "*")
+                        }
+                    }
                 }
             } else {
-                localRecognize(data)
+                val localResult = localRecognize(data)
+                if (localResult != null) {
+                    newFixedLengthResponse(Response.Status.OK, "application/json", localResult).apply {
+                        addHeader("Access-Control-Allow-Origin", "*")
+                        addHeader("Cache-Control", "no-cache, no-store")
+                    }
+                } else {
+                    newFixedLengthResponse(Response.Status.OK, "application/json", """{"error":"local inference failed"}""").apply {
+                        addHeader("Access-Control-Allow-Origin", "*")
+                    }
+                }
             }
                         }
                         session.uri == "/api/cloud_status" -> {
@@ -299,18 +329,15 @@ class HttpServerService : Service() {
         }
     }
 
-    private fun localRecognize(screenshotData: ByteArray): Response {
+    private fun localRecognize(screenshotData: ByteArray): String? {
         if (!modelLoaded) { initDetector() }
         if (!modelLoaded) {
-            val json = JSONObject().apply {
+            return JSONObject().apply {
                 put("error", "model not loaded: $modelError")
                 put("tiles", JSONArray())
                 put("names", JSONArray())
                 put("debug", "model_not_loaded")
             }.toString()
-            return newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
-                addHeader("Access-Control-Allow-Origin", "*")
-            }
         }
         try {
             val bitmap = BitmapFactory.decodeByteArray(screenshotData, 0, screenshotData.size)
@@ -333,7 +360,7 @@ class HttpServerService : Service() {
                     })
                 }
                 val namesArray = JSONArray(result.handTileNames)
-                val json = JSONObject().apply {
+                return JSONObject().apply {
                     put("tiles", tilesArray)
                     put("names", namesArray)
                     put("avgConf", result.confidence)
@@ -343,33 +370,23 @@ class HttpServerService : Service() {
                     put("cropRight", cropRight)
                     put("inferBackend", "local")
                 }.toString()
-                return newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
-                    addHeader("Access-Control-Allow-Origin", "*")
-                    addHeader("Cache-Control", "no-cache, no-store")
-                }
             } else {
                 val err = detector?.lastError ?: "recognition failed"
                 val dbg = detector?.lastDebug ?: ""
-                val json = JSONObject().apply {
+                return JSONObject().apply {
                     put("error", err)
                     put("tiles", JSONArray())
                     put("names", JSONArray())
                     put("debug", dbg)
                 }.toString()
-                return newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
-                    addHeader("Access-Control-Allow-Origin", "*")
-                }
             }
         } catch (e: Exception) {
-            val json = JSONObject().apply {
+            return JSONObject().apply {
                 put("error", e.message ?: "unknown error")
                 put("tiles", JSONArray())
                 put("names", JSONArray())
                 put("debug", "exception")
             }.toString()
-            return newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
-                addHeader("Access-Control-Allow-Origin", "*")
-            }
         }
     }
 
