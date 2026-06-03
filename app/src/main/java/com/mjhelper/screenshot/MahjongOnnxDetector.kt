@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import java.nio.FloatBuffer
 import java.io.InputStream
 import kotlin.math.max
 import kotlin.math.min
@@ -108,7 +109,8 @@ class MahjongOnnxDetector(context: Context) {
             
             // 2. 推理
             val inputName = session?.inputNames?.iterator()?.next() ?: return null
-            val inputTensor = OnnxTensor.createTensor(env, input, longArrayOf(1, 3, 640, 640))
+            val inputBuffer = FloatBuffer.wrap(input)
+            val inputTensor = OnnxTensor.createTensor(env, inputBuffer, longArrayOf(1, 3, 640, 640))
             val output = session?.run(mapOf(inputName to inputTensor))
             inputTensor.close()
             
