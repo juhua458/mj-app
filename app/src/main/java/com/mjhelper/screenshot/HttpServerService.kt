@@ -17,7 +17,15 @@ import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
 
+import java.net.HttpURLConnection
+import java.net.URL
+import java.io.OutputStream
 class HttpServerService : Service() {
+
+    companion object {
+        var cloudInferUrl: String = ""  // Cloud inference URL, e.g. "https://xxx.hf.space"
+        var useCloudInfer: Boolean = true  // Default: use cloud if available
+    }
 
     private var server: NanoHTTPD? = null
     private var helperHtml: String? = null
@@ -117,7 +125,6 @@ class HttpServerService : Service() {
                             }
                         }
                         session.uri == "/api/recognize" -> {
-            if (!modelLoaded) { initDetector() }
             val data = ScreenCaptureService.latestScreenshot
             if (data == null) {
                 val json = JSONObject().apply {
@@ -129,80 +136,52 @@ class HttpServerService : Service() {
                 newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
                     addHeader("Access-Control-Allow-Origin", "*")
                 }
-            } else if (!modelLoaded) {
-                val json = JSONObject().apply {
-                    put("error", "model not loaded: $modelError")
-                    put("tiles", JSONArray())
-                    put("names", JSONArray())
-                    put("debug", "model_not_loaded")
-                }.toString()
-                newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
-                    addHeader("Access-Control-Allow-Origin", "*")
-                }
-            } else {
+            } else if (useCloudInfer && cloudInferUrl.isNotEmpty()) {
+                // ★ Cloud inference: send screenshot to cloud server
                 try {
-                    val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
-                    val imgW = bitmap.width
-                    val imgH = bitmap.height
-                    
-                    // 获取helper面板宽度用于裁剪
-                    val panelWidth = FloatingService.currentPanelWidth
-                    val isLandscape = imgW > imgH
-                    val cropRight = if (isLandscape && panelWidth > 0) panelWidth else 0
-                    
-                    // 传cropRight给detector, 裁掉helper面板区域
-                    val result = detector?.recognize(bitmap, cropRight = cropRight)
-                    bitmap.recycle()
-                    
-                    if (result != null) {
-                        val tilesArray = JSONArray()
-                        for (tile in result.handTiles) {
-                            tilesArray.put(JSONObject().apply {
-                                put("name", tile.className)
-                                put("short", tile.shortName)
-                                put("conf", tile.confidence)
-                                put("x", tile.centerX.toInt())
-                            })
-                        }
-                        val namesArray = JSONArray(result.handTileNames)
-                        val json = JSONObject().apply {
-                            put("tiles", tilesArray)
-                            put("names", namesArray)
-                            put("avgConf", result.confidence)
-                            put("total", result.allDetections.size)
-                            put("debug", result.debugInfo)
-                            put("imgSize", "${imgW}x${imgH}")
-                            put("cropRight", cropRight)
-                        }.toString()
-                        newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
+                    val cloudResult = cloudRecognize(data)
+                    if (cloudResult != null) {
+                        newFixedLengthResponse(Response.Status.OK, "application/json", cloudResult).apply {
                             addHeader("Access-Control-Allow-Origin", "*")
                             addHeader("Cache-Control", "no-cache, no-store")
                         }
                     } else {
-                        val err = detector?.lastError ?: "recognition failed"
-                        val dbg = detector?.lastDebug ?: ""
-                        val json = JSONObject().apply {
-                            put("error", err)
-                            put("tiles", JSONArray())
-                            put("names", JSONArray())
-                            put("debug", dbg)
-                        }.toString()
-                        newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
-                            addHeader("Access-Control-Allow-Origin", "*")
-                        }
+                        // Cloud failed, fall back to local
+                        localRecognize(data)
                     }
                 } catch (e: Exception) {
-                    val json = JSONObject().apply {
-                        put("error", e.message ?: "unknown error")
-                        put("tiles", JSONArray())
-                        put("names", JSONArray())
-                        put("debug", "exception")
-                    }.toString()
-                    newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
-                        addHeader("Access-Control-Allow-Origin", "*")
-                    }
+                    localRecognize(data)
                 }
+            } else {
+                localRecognize(data)
             }
+                        }
+                        session.uri == "/api/cloud_status" -> {
+                            val json = JSONObject().apply {
+                                put("cloudUrl", cloudInferUrl)
+                                put("useCloud", useCloudInfer)
+                                put("cloudAvailable", cloudInferUrl.isNotEmpty())
+                            }.toString()
+                            newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
+                                addHeader("Access-Control-Allow-Origin", "*")
+                            }
+                        }
+                        session.uri == "/api/cloud_set" -> {
+                            // POST: set cloud URL and toggle
+                            try {
+                                val body = java.util.HashMap<String, String>()
+                                session.parseBody(body)
+                                val params = JSONObject(body["postData"] ?: "{}")
+                                if (params.has("url")) cloudInferUrl = params.getString("url")
+                                if (params.has("use")) useCloudInfer = params.getBoolean("use")
+                            } catch (_: Exception) {}
+                            val json = JSONObject().apply {
+                                put("cloudUrl", cloudInferUrl)
+                                put("useCloud", useCloudInfer)
+                            }.toString()
+                            newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
+                                addHeader("Access-Control-Allow-Origin", "*")
+                            }
                         }
                         session.uri == "/api/status" -> {
                             val capture = ScreenCaptureService
@@ -252,6 +231,146 @@ class HttpServerService : Service() {
             }
         }
         return START_STICKY
+    }
+
+
+    private fun cloudRecognize(screenshotData: ByteArray): String? {
+        try {
+            val url = URL("$cloudInferUrl/api/recognize")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.connectTimeout = 10000
+            conn.readTimeout = 15000
+            val boundary = "----CloudInfer${System.currentTimeMillis()}"
+            conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+
+            val os = conn.outputStream
+            // Write multipart form data
+            os.write("--$boundary\r\n".toByteArray())
+            os.write("Content-Disposition: form-data; name=\"file\"; filename=\"screenshot.jpg\"\r\n".toByteArray())
+            os.write("Content-Type: image/jpeg\r\n\r\n".toByteArray())
+            os.write(screenshotData)
+            os.write("\r\n--$boundary--\r\n".toByteArray())
+            os.flush()
+            os.close()
+
+            val responseCode = conn.responseCode
+            if (responseCode == 200) {
+                val response = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+
+                // Convert cloud response format to local format
+                val cloudJson = JSONObject(response)
+                val cloudTiles = cloudJson.optJSONArray("tiles") ?: JSONArray()
+                val cloudDetails = cloudJson.optJSONArray("tile_details") ?: JSONArray()
+                val cloudDebug = cloudJson.optJSONObject("debug") ?: JSONObject()
+
+                val tilesArray = JSONArray()
+                val namesArray = JSONArray()
+                for (i in 0 until cloudTiles.length()) {
+                    val tileName = cloudTiles.getString(i)
+                    val detail = if (i < cloudDetails.length()) cloudDetails.getJSONObject(i) else null
+                    tilesArray.put(JSONObject().apply {
+                        put("name", tileName)
+                        put("short", tileName)
+                        put("conf", detail?.optDouble("conf", 0.0) ?: 0.0)
+                        put("x", detail?.optInt("x1", 0) ?: 0)
+                    })
+                    namesArray.put(tileName)
+                }
+
+                return JSONObject().apply {
+                    put("tiles", tilesArray)
+                    put("names", namesArray)
+                    put("avgConf", 0.0)
+                    put("total", cloudDebug.optInt("after_nms", 0))
+                    put("debug", "CLOUD_OK raw=${cloudDebug.optInt("raw_detections",0)} nms=${cloudDebug.optInt("after_nms",0)} hand=${cloudDebug.optInt("hand_count",0)} ${cloudDebug.optString("input_size","")} ${cloudDebug.optInt("elapsed_ms",0)}ms")
+                    put("imgSize", cloudDebug.optString("input_size", ""))
+                    put("cropRight", cloudDebug.optInt("crop_right", 0))
+                    put("inferBackend", "cloud")
+                }.toString()
+            } else {
+                conn.disconnect()
+                return null
+            }
+        } catch (e: Exception) {
+            return null
+        }
+    }
+
+    private fun localRecognize(screenshotData: ByteArray): Response {
+        if (!modelLoaded) { initDetector() }
+        if (!modelLoaded) {
+            val json = JSONObject().apply {
+                put("error", "model not loaded: $modelError")
+                put("tiles", JSONArray())
+                put("names", JSONArray())
+                put("debug", "model_not_loaded")
+            }.toString()
+            return newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
+                addHeader("Access-Control-Allow-Origin", "*")
+            }
+        }
+        try {
+            val bitmap = BitmapFactory.decodeByteArray(screenshotData, 0, screenshotData.size)
+            val imgW = bitmap.width
+            val imgH = bitmap.height
+            val panelWidth = FloatingService.currentPanelWidth
+            val isLandscape = imgW > imgH
+            val cropRight = if (isLandscape && panelWidth > 0) panelWidth else 0
+            val result = detector?.recognize(bitmap, cropRight = cropRight)
+            bitmap.recycle()
+
+            if (result != null) {
+                val tilesArray = JSONArray()
+                for (tile in result.handTiles) {
+                    tilesArray.put(JSONObject().apply {
+                        put("name", tile.className)
+                        put("short", tile.shortName)
+                        put("conf", tile.confidence)
+                        put("x", tile.centerX.toInt())
+                    })
+                }
+                val namesArray = JSONArray(result.handTileNames)
+                val json = JSONObject().apply {
+                    put("tiles", tilesArray)
+                    put("names", namesArray)
+                    put("avgConf", result.confidence)
+                    put("total", result.allDetections.size)
+                    put("debug", result.debugInfo)
+                    put("imgSize", "${imgW}x${imgH}")
+                    put("cropRight", cropRight)
+                    put("inferBackend", "local")
+                }.toString()
+                return newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
+                    addHeader("Access-Control-Allow-Origin", "*")
+                    addHeader("Cache-Control", "no-cache, no-store")
+                }
+            } else {
+                val err = detector?.lastError ?: "recognition failed"
+                val dbg = detector?.lastDebug ?: ""
+                val json = JSONObject().apply {
+                    put("error", err)
+                    put("tiles", JSONArray())
+                    put("names", JSONArray())
+                    put("debug", dbg)
+                }.toString()
+                return newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
+                    addHeader("Access-Control-Allow-Origin", "*")
+                }
+            }
+        } catch (e: Exception) {
+            val json = JSONObject().apply {
+                put("error", e.message ?: "unknown error")
+                put("tiles", JSONArray())
+                put("names", JSONArray())
+                put("debug", "exception")
+            }.toString()
+            return newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
+                addHeader("Access-Control-Allow-Origin", "*")
+            }
+        }
     }
 
     override fun onDestroy() {
