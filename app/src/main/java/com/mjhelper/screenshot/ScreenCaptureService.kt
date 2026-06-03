@@ -48,6 +48,7 @@ class ScreenCaptureService : Service() {
     private var screenWidth = 540
     private var screenHeight = 1200
     private var screenDensity = 160
+    private var lastCheckTime: Long = 0
     private var consecutiveFails = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -116,7 +117,6 @@ class ScreenCaptureService : Service() {
             handler.postDelayed(object : Runnable {
                 override fun run() {
                     if (isRunning) {
-                        checkAndRecreateDisplay()
                         captureScreen()
                         handler.postDelayed(this, 800)
                     }
@@ -170,59 +170,6 @@ class ScreenCaptureService : Service() {
         )
     }
 
-    private fun checkAndRecreateDisplay() {
-        try {
-            val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            val realW: Int
-            val realH: Int
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val bounds = wm.currentWindowMetrics.bounds
-                realW = bounds.width()
-                realH = bounds.height()
-            } else {
-                val metrics = DisplayMetrics()
-                @Suppress("DEPRECATION")
-                wm.defaultDisplay.getRealMetrics(metrics)
-                realW = metrics.widthPixels
-                realH = metrics.heightPixels
-            }
-            val newWidth = realW * 3 / 4
-            val newHeight = realH * 3 / 4
-
-            // If dimensions changed (screen rotated), recreate VirtualDisplay
-            if (newWidth != screenWidth || newHeight != screenHeight) {
-                try {
-                    virtualDisplay?.release()
-                } catch (_: Exception) {}
-                try {
-                    imageReader?.close()
-                } catch (_: Exception) {}
-
-                screenWidth = newWidth
-                screenHeight = newHeight
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    screenDensity = wm.currentWindowMetrics.density.toInt() * 3 / 4
-                } else {
-                    val m = DisplayMetrics()
-                    @Suppress("DEPRECATION")
-                    wm.defaultDisplay.getRealMetrics(m)
-                    screenDensity = m.densityDpi * 3 / 4
-                }
-
-                imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
-                virtualDisplay = mediaProjection?.createVirtualDisplay(
-                    "MJScreenCapture",
-                    screenWidth, screenHeight, screenDensity,
-                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                    imageReader?.surface,
-                    null, null
-                )
-            }
-        } catch (e: Exception) {
-            lastError = "重建显示失败: ${e.message}"
-        }
-    }
-
     private fun captureScreen() {
         try {
             val image: Image? = imageReader?.acquireLatestImage()
@@ -233,12 +180,58 @@ class ScreenCaptureService : Service() {
                 val rowStride = planes[0].rowStride
                 val rowPadding = rowStride - pixelStride * screenWidth
 
-                val bitmap = Bitmap.createBitmap(
+                var bitmap = Bitmap.createBitmap(
                     screenWidth + rowPadding / pixelStride,
                     screenHeight, Bitmap.Config.ARGB_8888
                 )
                 bitmap.copyPixelsFromBuffer(buffer)
                 image.close()
+
+                // Check if screen rotated: if VirtualDisplay is portrait but real screen is landscape
+                val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                val realW: Int
+                val realH: Int
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    val bounds = wm.currentWindowMetrics.bounds
+                    realW = bounds.width()
+                    realH = bounds.height()
+                } else {
+                    val dm = DisplayMetrics()
+                    @Suppress("DEPRECATION")
+                    wm.defaultDisplay.getRealMetrics(dm)
+                    realW = dm.widthPixels
+                    realH = dm.heightPixels
+                }
+                val isRealLandscape = realW > realH
+                val isCaptureLandscape = bitmap.width > bitmap.height
+
+                // If orientation mismatch, recreate VirtualDisplay with correct dimensions
+                if (isRealLandscape != isCaptureLandscape) {
+                    try { virtualDisplay?.release() } catch (_: Exception) {}
+                    try { imageReader?.close() } catch (_: Exception) {}
+
+                    screenWidth = realW * 3 / 4
+                    screenHeight = realH * 3 / 4
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        screenDensity = wm.currentWindowMetrics.density.toInt() * 3 / 4
+                    } else {
+                        val m = DisplayMetrics()
+                        @Suppress("DEPRECATION")
+                        wm.defaultDisplay.getRealMetrics(m)
+                        screenDensity = m.densityDpi * 3 / 4
+                    }
+
+                    imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
+                    virtualDisplay = mediaProjection?.createVirtualDisplay(
+                        "MJScreenCapture",
+                        screenWidth, screenHeight, screenDensity,
+                        DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                        imageReader?.surface,
+                        null, null
+                    )
+                    bitmap.recycle()
+                    return // Skip this frame, next one will be correct orientation
+                }
 
                 val stream = ByteArrayOutputStream()
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 75, stream)
