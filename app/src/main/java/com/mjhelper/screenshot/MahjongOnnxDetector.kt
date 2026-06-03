@@ -149,7 +149,8 @@ class MahjongOnnxDetector(context: Context) {
         val confidence: Float,
         val x1: Float, val y1: Float,
         val x2: Float, val y2: Float,
-        val centerX: Float
+        val centerX: Float,
+        val centerY: Float
     )
     
     data class RecognitionResult(
@@ -403,7 +404,8 @@ class MahjongOnnxDetector(context: Context) {
                 confidence = maxClassScore,
                 x1 = cxOrig - wOrig / 2, y1 = cyOrig - hOrig / 2,
                 x2 = cxOrig + wOrig / 2, y2 = cyOrig + hOrig / 2,
-                centerX = cxOrig
+                centerX = cxOrig,
+                centerY = cyOrig
             ))
         }
     }
@@ -459,7 +461,8 @@ class MahjongOnnxDetector(context: Context) {
                 confidence = maxClassScore,
                 x1 = cxOrig - wOrig / 2, y1 = cyOrig - hOrig / 2,
                 x2 = cxOrig + wOrig / 2, y2 = cyOrig + hOrig / 2,
-                centerX = cxOrig
+                centerX = cxOrig,
+                centerY = cyOrig
             ))
         }
     }
