@@ -132,12 +132,29 @@ class ScreenCaptureService : Service() {
 
     private fun setupVirtualDisplay() {
         val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        wm.defaultDisplay.getMetrics(metrics)
-        val newWidth = metrics.widthPixels * 3 / 4
-        val newHeight = metrics.heightPixels * 3 / 4
-        val newDensity = metrics.densityDpi * 3 / 4
+        val realW: Int
+        val realH: Int
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val bounds = wm.currentWindowMetrics.bounds
+            realW = bounds.width()
+            realH = bounds.height()
+        } else {
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay.getRealMetrics(metrics)
+            realW = metrics.widthPixels
+            realH = metrics.heightPixels
+        }
+        val newWidth = realW * 3 / 4
+        val newHeight = realH * 3 / 4
+        val newDensity = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            wm.currentWindowMetrics.density.toInt() * 3 / 4
+        } else {
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay.getRealMetrics(metrics)
+            metrics.densityDpi * 3 / 4
+        }
 
         screenWidth = newWidth
         screenHeight = newHeight
@@ -156,11 +173,21 @@ class ScreenCaptureService : Service() {
     private fun checkAndRecreateDisplay() {
         try {
             val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            val metrics = DisplayMetrics()
-            @Suppress("DEPRECATION")
-            wm.defaultDisplay.getMetrics(metrics)
-            val newWidth = metrics.widthPixels * 3 / 4
-            val newHeight = metrics.heightPixels * 3 / 4
+            val realW: Int
+            val realH: Int
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val bounds = wm.currentWindowMetrics.bounds
+                realW = bounds.width()
+                realH = bounds.height()
+            } else {
+                val metrics = DisplayMetrics()
+                @Suppress("DEPRECATION")
+                wm.defaultDisplay.getRealMetrics(metrics)
+                realW = metrics.widthPixels
+                realH = metrics.heightPixels
+            }
+            val newWidth = realW * 3 / 4
+            val newHeight = realH * 3 / 4
 
             // If dimensions changed (screen rotated), recreate VirtualDisplay
             if (newWidth != screenWidth || newHeight != screenHeight) {
@@ -173,7 +200,14 @@ class ScreenCaptureService : Service() {
 
                 screenWidth = newWidth
                 screenHeight = newHeight
-                screenDensity = metrics.densityDpi * 3 / 4
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    screenDensity = wm.currentWindowMetrics.density.toInt() * 3 / 4
+                } else {
+                    val m = DisplayMetrics()
+                    @Suppress("DEPRECATION")
+                    wm.defaultDisplay.getRealMetrics(m)
+                    screenDensity = m.densityDpi * 3 / 4
+                }
 
                 imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
                 virtualDisplay = mediaProjection?.createVirtualDisplay(

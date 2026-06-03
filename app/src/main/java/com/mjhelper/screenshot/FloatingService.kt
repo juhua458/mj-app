@@ -80,9 +80,23 @@ class FloatingService : Service() {
     private fun showFloatingWindow() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
-        val dm = DisplayMetrics()
-        windowManager?.defaultDisplay?.getMetrics(dm)
-        val screenWidth = dm.widthPixels
+        // Get REAL screen size (respecting current rotation)
+        val realW: Int
+        val realH: Int
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val bounds = windowManager?.currentWindowMetrics?.bounds
+            realW = bounds?.width() ?: 1080
+            realH = bounds?.height() ?: 2344
+        } else {
+            val dm = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            windowManager?.defaultDisplay?.getRealMetrics(dm)
+            realW = dm.widthPixels
+            realH = dm.heightPixels
+        }
+        val screenWidth = realW
+        val screenHeight = realH
+        val isLandscape = screenWidth > screenHeight
 
         // Mini floating panel
         val container = LinearLayout(this).apply {
@@ -161,10 +175,6 @@ class FloatingService : Service() {
 
         floatingView = container
 
-        // Detect landscape vs portrait
-        val screenHeight = dm.heightPixels
-        val isLandscape = screenWidth > screenHeight
-
         // Window params - sidebar for landscape, compact for portrait
         var winW: Int
         var winH: Int
@@ -233,10 +243,22 @@ class FloatingService : Service() {
     private fun toggleExpand() {
         isExpanded = !isExpanded
         webView?.visibility = if (isExpanded) View.VISIBLE else View.GONE
-        val dm = DisplayMetrics()
-        windowManager?.defaultDisplay?.getMetrics(dm)
-        val screenWidth = dm.widthPixels
-        val screenHeight = dm.heightPixels
+
+        val realW: Int
+        val realH: Int
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val bounds = windowManager?.currentWindowMetrics?.bounds
+            realW = bounds?.width() ?: 1080
+            realH = bounds?.height() ?: 2344
+        } else {
+            val dm = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            windowManager?.defaultDisplay?.getRealMetrics(dm)
+            realW = dm.widthPixels
+            realH = dm.heightPixels
+        }
+        val screenWidth = realW
+        val screenHeight = realH
         val isLandscape = screenWidth > screenHeight
 
         val params = floatingView?.layoutParams as? WindowManager.LayoutParams ?: return
