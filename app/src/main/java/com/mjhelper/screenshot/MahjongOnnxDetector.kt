@@ -5,13 +5,14 @@ import android.graphics.Bitmap
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import ai.onnxruntime.OnnxValue
 import java.nio.FloatBuffer
 import java.io.InputStream
 import kotlin.math.max
 import kotlin.math.min
 
 /**
- * ONNX Runtime 麻将牌识别引擎
+ * ONNX Runtime 麻将牌识别引擎 v2
  * 使用 YOLO11n nano模型，输入640x640，输出35类麻将牌
  * 
  * 类别映射: m=万子, p=筒子, s=条子, z=字牌
@@ -59,7 +60,11 @@ class MahjongOnnxDetector(context: Context) {
             val sessionOptions = OrtSession.SessionOptions()
             sessionOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             // 启用NNAPI加速(Android Neural Networks API)
-            sessionOptions.addNnapi()  
+            try {
+                sessionOptions.addNnapi()
+            } catch (e: Exception) {
+                // NNAPI不可用时降级到CPU
+            }
             session = env?.createSession(modelBytes, sessionOptions)
             isLoaded = true
             true
@@ -97,7 +102,7 @@ class MahjongOnnxDetector(context: Context) {
         bitmap: Bitmap, 
         handRegionY1: Float = 0.75f,
         handRegionY2: Float = 0.95f,
-        confThreshold: Float = 0.4f
+        confThreshold: Float = 0.35f
     ): RecognitionResult? {
         if (!isLoaded || session == null || env == null) return null
         
@@ -114,17 +119,18 @@ class MahjongOnnxDetector(context: Context) {
             val output = session?.run(mapOf(inputName to inputTensor))
             inputTensor.close()
             
-            // 3. 后处理: 解析YOLO输出 (1, 39, 8400)
-            val outputTensor = output?.get(0)?.value as? Array<FloatArray> ?: return null
-            val detections = postprocess(outputTensor, bitmap.width, bitmap.height, confThreshold)
+            // 3. 后处理: 解析YOLO输出 - 自动检测输出格式
+            val outputTensor = output?.get(0) ?: return null
+            val detections = postprocessAuto(outputTensor, bitmap.width, bitmap.height, confThreshold)
             
             // 4. 分离手牌区和其他区域
             val imgH = bitmap.height.toFloat()
             val handY1 = imgH * handRegionY1
             val handY2 = imgH * handRegionY2
             
+            // 手牌筛选: 中心点在底部区域
             val handTiles = detections.filter { 
-                it.y1 >= handY1 && it.y2 <= handY2 * 1.1f 
+                it.y1 >= handY1 && it.y2 <= imgH * 1.05f
             }.sortedBy { it.centerX }
             
             val allNames = handTiles.map { it.shortName }
@@ -143,7 +149,7 @@ class MahjongOnnxDetector(context: Context) {
         
         for (i in pixels.indices) {
             val pixel = pixels[i]
-            // CHW格式, BGR顺序(与YOLO训练一致)
+            // CHW格式, RGB顺序
             floatArray[i] = ((pixel shr 16) and 0xFF) / 255.0f  // R
             floatArray[640 * 640 + i] = ((pixel shr 8) and 0xFF) / 255.0f  // G
             floatArray[2 * 640 * 640 + i] = (pixel and 0xFF) / 255.0f  // B
@@ -151,41 +157,92 @@ class MahjongOnnxDetector(context: Context) {
         return floatArray
     }
     
-    private fun postprocess(
-        output: Array<FloatArray>, 
-        origW: Int, origH: Int, 
+    /**
+     * 自动检测ONNX输出格式并解析
+     * YOLO输出可能是 [1,39,8400] 或 [1,8400,39]
+     */
+    private fun postprocessAuto(
+        outputValue: OnnxValue,
+        origW: Int, origH: Int,
         confThreshold: Float
     ): List<Detection> {
         val detections = mutableListOf<Detection>()
-        // output shape: [1][39][8400] -> output[0] is the batch
-        // 39 = 4(bbox) + 35(classes) for each of 8400 anchors
-        val data = output[0]  // [39][8400]
-        val numAnchors = 8400
-        val numClasses = 35
         
-        // Scale factors from 640x640 to original size
+        try {
+            // 尝试获取输出shape
+            val shape = outputValue.info.shape
+            val numClasses = 35
+            
+            if (shape.size == 3) {
+                val dim1 = shape[1].toInt()
+                val dim2 = shape[2].toInt()
+                
+                if (dim1 == 39 && dim2 == 8400) {
+                    // 格式: [1, 39, 8400] - 每行是一个特征(4bbox+35class), 每列是一个anchor
+                    val data = (outputValue.value as? Array<Array<FloatArray>>)?.getOrNull(0) ?: return emptyList()
+                    parseOutput39x8400(data, origW, origH, confThreshold, numClasses, detections)
+                } else if (dim1 == 8400 && dim2 == 39) {
+                    // 格式: [1, 8400, 39] - 每行是一个anchor, 每列是一个特征
+                    val data = (outputValue.value as? Array<Array<FloatArray>>)?.getOrNull(0) ?: return emptyList()
+                    parseOutput8400x39(data, origW, origH, confThreshold, numClasses, detections)
+                } else {
+                    // Unknown format, try both and pick the one with more detections
+                    val data = (outputValue.value as? Array<Array<FloatArray>>)?.getOrNull(0) ?: return emptyList()
+                    val d1 = mutableListOf<Detection>()
+                    val d2 = mutableListOf<Detection>()
+                    if (data.isNotEmpty()) {
+                        try { parseOutput39x8400(data, origW, origH, confThreshold, numClasses, d1) } catch (_: Exception) {}
+                        try { parseOutput8400x39(data, origW, origH, confThreshold, numClasses, d2) } catch (_: Exception) {}
+                    }
+                    detections.addAll(if (d1.size >= d2.size) d1 else d2)
+                }
+            } else if (shape.size == 2) {
+                // 2D output
+                val data = (outputValue.value as? Array<FloatArray>) ?: return emptyList()
+                if (data.size == 39) {
+                    parseOutput39x8400_2d(data, origW, origH, confThreshold, numClasses, detections)
+                } else if (data.size == 8400) {
+                    parseOutput8400x39_2d(data, origW, origH, confThreshold, numClasses, detections)
+                }
+            }
+        } catch (e: Exception) {
+            // Fallback: try original parsing
+            try {
+                val data = (outputValue.value as? Array<FloatArray>) ?: return emptyList()
+                parseOutput39x8400_2d(data, origW, origH, confThreshold, numClasses, detections)
+            } catch (_: Exception) {}
+        }
+        
+        return nms(detections, 0.45f)
+    }
+    
+    // [39][8400] format - data[feature][anchor]
+    private fun parseOutput39x8400(
+        data: Array<FloatArray>, 
+        origW: Int, origH: Int, 
+        confThreshold: Float, numClasses: Int,
+        detections: MutableList<Detection>
+    ) {
+        val numAnchors = data[0].size
         val scaleX = origW / 640.0f
         val scaleY = origH / 640.0f
         
         for (i in 0 until numAnchors) {
-            // Find max class score
             var maxClassScore = 0f
             var maxClassId = 0
             for (c in 0 until numClasses) {
-                val score = data[4 + c + i * 39]  
+                val score = data[4 + c][i]
                 if (score > maxClassScore) {
                     maxClassScore = score
                     maxClassId = c
                 }
             }
-            
             if (maxClassScore < confThreshold) continue
             
-            // Decode bbox (cx, cy, w, h)
-            val cx = data[0 + i * 39] * scaleX
-            val cy = data[1 + i * 39] * scaleY
-            val w = data[2 + i * 39] * scaleX
-            val h = data[3 + i * 39] * scaleY
+            val cx = data[0][i] * scaleX
+            val cy = data[1][i] * scaleY
+            val w = data[2][i] * scaleX
+            val h = data[3][i] * scaleY
             
             detections.add(Detection(
                 classId = maxClassId,
@@ -197,9 +254,130 @@ class MahjongOnnxDetector(context: Context) {
                 centerX = cx
             ))
         }
+    }
+    
+    // [8400][39] format - data[anchor][feature]
+    private fun parseOutput8400x39(
+        data: Array<FloatArray>,
+        origW: Int, origH: Int,
+        confThreshold: Float, numClasses: Int,
+        detections: MutableList<Detection>
+    ) {
+        val numAnchors = data.size
+        val scaleX = origW / 640.0f
+        val scaleY = origH / 640.0f
         
-        // NMS (Non-Maximum Suppression)
-        return nms(detections, 0.45f)
+        for (i in 0 until numAnchors) {
+            if (data[i].size < 39) continue
+            var maxClassScore = 0f
+            var maxClassId = 0
+            for (c in 0 until numClasses) {
+                val score = data[i][4 + c]
+                if (score > maxClassScore) {
+                    maxClassScore = score
+                    maxClassId = c
+                }
+            }
+            if (maxClassScore < confThreshold) continue
+            
+            val cx = data[i][0] * scaleX
+            val cy = data[i][1] * scaleY
+            val w = data[i][2] * scaleX
+            val h = data[i][3] * scaleY
+            
+            detections.add(Detection(
+                classId = maxClassId,
+                className = classNames[maxClassId] ?: "?",
+                shortName = shortNames[maxClassId] ?: "?",
+                confidence = maxClassScore,
+                x1 = cx - w / 2, y1 = cy - h / 2,
+                x2 = cx + w / 2, y2 = cy + h / 2,
+                centerX = cx
+            ))
+        }
+    }
+    
+    // 2D fallback: [39][8400]
+    private fun parseOutput39x8400_2d(
+        data: Array<FloatArray>,
+        origW: Int, origH: Int,
+        confThreshold: Float, numClasses: Int,
+        detections: MutableList<Detection>
+    ) {
+        if (data.isEmpty()) return
+        val numAnchors = data[0].size
+        val scaleX = origW / 640.0f
+        val scaleY = origH / 640.0f
+        
+        for (i in 0 until numAnchors) {
+            var maxClassScore = 0f
+            var maxClassId = 0
+            for (c in 0 until numClasses) {
+                if (4 + c >= data.size) break
+                val score = data[4 + c][i]
+                if (score > maxClassScore) {
+                    maxClassScore = score
+                    maxClassId = c
+                }
+            }
+            if (maxClassScore < confThreshold) continue
+            
+            val cx = data[0][i] * scaleX
+            val cy = data[1][i] * scaleY
+            val w = data[2][i] * scaleX
+            val h = data[3][i] * scaleY
+            
+            detections.add(Detection(
+                classId = maxClassId,
+                className = classNames[maxClassId] ?: "?",
+                shortName = shortNames[maxClassId] ?: "?",
+                confidence = maxClassScore,
+                x1 = cx - w / 2, y1 = cy - h / 2,
+                x2 = cx + w / 2, y2 = cy + h / 2,
+                centerX = cx
+            ))
+        }
+    }
+    
+    // 2D fallback: [8400][39]
+    private fun parseOutput8400x39_2d(
+        data: Array<FloatArray>,
+        origW: Int, origH: Int,
+        confThreshold: Float, numClasses: Int,
+        detections: MutableList<Detection>
+    ) {
+        val numAnchors = data.size
+        val scaleX = origW / 640.0f
+        val scaleY = origH / 640.0f
+        
+        for (i in 0 until numAnchors) {
+            if (data[i].size < 39) continue
+            var maxClassScore = 0f
+            var maxClassId = 0
+            for (c in 0 until numClasses) {
+                val score = data[i][4 + c]
+                if (score > maxClassScore) {
+                    maxClassScore = score
+                    maxClassId = c
+                }
+            }
+            if (maxClassScore < confThreshold) continue
+            
+            val cx = data[i][0] * scaleX
+            val cy = data[i][1] * scaleY
+            val w = data[i][2] * scaleX
+            val h = data[i][3] * scaleY
+            
+            detections.add(Detection(
+                classId = maxClassId,
+                className = classNames[maxClassId] ?: "?",
+                shortName = shortNames[maxClassId] ?: "?",
+                confidence = maxClassScore,
+                x1 = cx - w / 2, y1 = cy - h / 2,
+                x2 = cx + w / 2, y2 = cy + h / 2,
+                centerX = cx
+            ))
+        }
     }
     
     private fun nms(detections: List<Detection>, iouThreshold: Float): List<Detection> {

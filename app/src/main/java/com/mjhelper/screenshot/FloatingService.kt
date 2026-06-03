@@ -23,7 +23,6 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 
@@ -79,64 +78,10 @@ class FloatingService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        // Resize floating window when screen rotates
         handler.postDelayed({ resizeFloatingWindow() }, 500)
     }
 
-    private fun resizeFloatingWindow() {
-        try {
-            val params = floatingView?.layoutParams as? WindowManager.LayoutParams ?: return
-
-            val realW: Int
-            val realH: Int
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val bounds = windowManager?.currentWindowMetrics?.bounds
-                realW = bounds?.width() ?: 1080
-                realH = bounds?.height() ?: 2344
-            } else {
-                val dm = DisplayMetrics()
-                @Suppress("DEPRECATION")
-                windowManager?.defaultDisplay?.getRealMetrics(dm)
-                realW = dm.widthPixels
-                realH = dm.heightPixels
-            }
-            val screenWidth = realW
-            val screenHeight = realH
-            val isLandscape = screenWidth > screenHeight
-
-            if (isLandscape) {
-                if (isExpanded) {
-                    params.width = (screenWidth * 0.12).toInt().coerceIn(200, 320)
-                    params.height = (screenHeight * 0.6).toInt()
-                } else {
-                    params.width = 120
-                    params.height = WindowManager.LayoutParams.WRAP_CONTENT
-                }
-                params.gravity = Gravity.END or Gravity.TOP
-                params.x = 0
-                params.y = (screenHeight * 0.1).toInt()
-            } else {
-                if (isExpanded) {
-                    params.width = (screenWidth * 0.7).toInt()
-                    params.height = (params.width * 0.9).toInt()
-                } else {
-                    params.width = (screenWidth * 0.4).toInt()
-                    params.height = WindowManager.LayoutParams.WRAP_CONTENT
-                }
-                params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                params.x = 0
-                params.y = 40
-            }
-
-            windowManager?.updateViewLayout(floatingView, params)
-        } catch (e: Exception) {}
-    }
-
-    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
-    private fun showFloatingWindow() {
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-
-        // Get REAL screen size (respecting current rotation)
+    private fun getScreenSize(): Pair<Int, Int> {
         val realW: Int
         val realH: Int
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -150,46 +95,83 @@ class FloatingService : Service() {
             realW = dm.widthPixels
             realH = dm.heightPixels
         }
-        val screenWidth = realW
-        val screenHeight = realH
+        return Pair(realW, realH)
+    }
+
+    private fun resizeFloatingWindow() {
+        try {
+            val params = floatingView?.layoutParams as? WindowManager.LayoutParams ?: return
+            val (screenWidth, screenHeight) = getScreenSize()
+            val isLandscape = screenWidth > screenHeight
+            applyWindowSize(params, screenWidth, screenHeight, isLandscape)
+            windowManager?.updateViewLayout(floatingView, params)
+        } catch (e: Exception) {}
+    }
+
+    private fun applyWindowSize(params: WindowManager.LayoutParams, screenWidth: Int, screenHeight: Int, isLandscape: Boolean) {
+        if (isExpanded) {
+            if (isLandscape) {
+                // 横屏: 右侧面板, 占屏幕28%宽度，全高
+                params.width = (screenWidth * 0.28).toInt().coerceIn(400, 700)
+                params.height = screenHeight
+                params.gravity = Gravity.END or Gravity.TOP
+                params.x = 0
+                params.y = 0
+            } else {
+                // 竖屏: 顶部卡片
+                params.width = (screenWidth * 0.8).toInt()
+                params.height = (params.width * 1.0).toInt()
+                params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                params.x = 0
+                params.y = 40
+            }
+        } else {
+            params.width = if (isLandscape) 140 else (screenWidth * 0.4).toInt()
+            params.height = WindowManager.LayoutParams.WRAP_CONTENT
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
+    private fun showFloatingWindow() {
+        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+
+        val (screenWidth, screenHeight) = getScreenSize()
         val isLandscape = screenWidth > screenHeight
 
-        // Mini floating panel
+        // Container
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xDD1c2333.toInt()) // semi-transparent dark
-            setPadding(8, 6, 8, 6)
+            setBackgroundColor(0xEE0a0e1a.toInt())
         }
 
-        // Top drag bar with status
+        // Top drag bar
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(0xFF5b21b6.toInt())
+            setPadding(12, 6, 12, 6)
         }
 
         tvStatus = TextView(this).apply {
-            text = "🀄 提示器 v17.8"
+            text = "🀄 v19.0 YOLO"
             setTextColor(0xFFe8edf5.toInt())
-            textSize = 12f
+            textSize = 13f
             setPadding(8, 4, 8, 4)
-            setBackgroundColor(0xFF5b21b6.toInt())
         }
 
         val tvCollapse = TextView(this).apply {
             text = "  ▼  "
             setTextColor(0xFFf59e0b.toInt())
-            textSize = 14f
+            textSize = 16f
             setPadding(4, 2, 4, 2)
-            setOnClickListener {
-                toggleExpand()
-            }
+            setOnClickListener { toggleExpand() }
         }
 
         topBar.addView(tvStatus, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         topBar.addView(tvCollapse)
         container.addView(topBar)
 
-        // WebView for the helper (compact)
+        // WebView
         val wv = WebView(this)
         webView = wv
         val wvParams = LinearLayout.LayoutParams(
@@ -217,13 +199,10 @@ class FloatingService : Service() {
         }
         wv.webChromeClient = WebChromeClient()
 
-        // Add JS interface for status updates
         wv.addJavascriptInterface(object : Any() {
             @JavascriptInterface
             fun updateStatus(text: String) {
-                handler.post {
-                    tvStatus?.text = text
-                }
+                handler.post { tvStatus?.text = text }
             }
         }, "AndroidStatus")
 
@@ -231,36 +210,23 @@ class FloatingService : Service() {
 
         floatingView = container
 
-        // Window params - sidebar for landscape, compact for portrait
+        // Window params
         var winW: Int
         var winH: Int
         var winGravity: Int
-        if (isLandscape) {
-            // Landscape: narrow right sidebar, compact height
-            winW = (screenWidth * 0.12).toInt().coerceIn(200, 320)
-            winH = (screenHeight * 0.6).toInt()
-            winGravity = Gravity.END or Gravity.TOP
-        } else {
-            // Portrait: compact floating card at top
-            winW = (screenWidth * 0.7).toInt()
-            winH = (winW * 0.9).toInt()
-            winGravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        }
 
         val params = WindowManager.LayoutParams(
-            winW,
-            winH,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = winGravity
-            x = 0
-            y = if (isLandscape) (screenHeight * 0.1).toInt() else 40
-        }
+        )
 
-        // Make the top bar draggable
+        applyWindowSize(params, screenWidth, screenHeight, isLandscape)
+
+        // Drag handling
         var initialX = 0
         var initialY = 0
         var initialTouchX = 0f
@@ -286,9 +252,7 @@ class FloatingService : Service() {
                     windowManager?.updateViewLayout(floatingView, params)
                     true
                 }
-                MotionEvent.ACTION_UP -> {
-                    !isDragging // consume if wasn't dragging
-                }
+                MotionEvent.ACTION_UP -> { !isDragging }
                 else -> false
             }
         }
@@ -300,40 +264,11 @@ class FloatingService : Service() {
         isExpanded = !isExpanded
         webView?.visibility = if (isExpanded) View.VISIBLE else View.GONE
 
-        val realW: Int
-        val realH: Int
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val bounds = windowManager?.currentWindowMetrics?.bounds
-            realW = bounds?.width() ?: 1080
-            realH = bounds?.height() ?: 2344
-        } else {
-            val dm = DisplayMetrics()
-            @Suppress("DEPRECATION")
-            windowManager?.defaultDisplay?.getRealMetrics(dm)
-            realW = dm.widthPixels
-            realH = dm.heightPixels
-        }
-        val screenWidth = realW
-        val screenHeight = realH
+        val (screenWidth, screenHeight) = getScreenSize()
         val isLandscape = screenWidth > screenHeight
 
         val params = floatingView?.layoutParams as? WindowManager.LayoutParams ?: return
-        if (isExpanded) {
-            if (isLandscape) {
-                params.width = (screenWidth * 0.12).toInt().coerceIn(200, 320)
-                params.height = (screenHeight * 0.6).toInt()
-                params.gravity = Gravity.END or Gravity.TOP
-                params.y = (screenHeight * 0.1).toInt()
-            } else {
-                params.width = (screenWidth * 0.7).toInt()
-                params.height = (params.width * 0.9).toInt()
-                params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                params.y = 40
-            }
-        } else {
-            params.width = if (isLandscape) 120 else (screenWidth * 0.4).toInt()
-            params.height = WindowManager.LayoutParams.WRAP_CONTENT
-        }
+        applyWindowSize(params, screenWidth, screenHeight, isLandscape)
         windowManager?.updateViewLayout(floatingView, params)
     }
 

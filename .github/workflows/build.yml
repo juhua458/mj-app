@@ -31,20 +31,20 @@ jobs:
         
     - name: Rename APK
       run: |
-        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v180.apk
+        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v190.apk
         
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
-        path: app/build/outputs/apk/debug/mjhelper_v180.apk
+        path: app/build/outputs/apk/debug/mjhelper_v190.apk
     
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v18.0
-        name: "V18.0 YOLO AI识别"
-        body: "V18.0: 🎉 重大升级！集成YOLO11n深度学习模型，ONNX Runtime推理引擎，35类麻将牌自动识别，告别像素分析！"
-        files: app/build/outputs/apk/debug/mjhelper_v180.apk
+        tag_name: v19.0
+        name: "V19.0 YOLO+策略引擎"
+        body: "V19.0: 🎉 YOLO识别+向听数策略引擎+横屏宽面板！1) 使用/api/recognize YOLO API自动识别 2) 内置向听数计算器推荐弃牌 3) 横屏面板从12%加宽到28%看得清策略 4) 修复ONNX输出解析兼容性"
+        files: app/build/outputs/apk/debug/mjhelper_v190.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
