@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>🀄 捉鸡麻将提示器 v16.2c</title>
+<title>🀄 捉鸡麻将提示器 v16.2d</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{--bg:#0a0e1a;--bg2:#131825;--card:#1c2333;--text:#e8edf5;--text2:#8b95a8;--red:#e54545;--green:#2ebd5e;--blue:#4a8eff;--gold:#f0a030}
@@ -56,7 +56,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 </head>
 <body>
 <div class="app">
-<div class="top-bar"><h1>🀄 捉鸡麻将提示器 v16.2c</h1></div>
+<div class="top-bar"><h1>🀄 捉鸡麻将提示器 v16.2d</h1></div>
 <div class="debug" id="debugPanel"></div>
 <div class="status-bar"><span class="chip early">早局</span><span class="chip cnt">牌:0</span></div>
 <div class="auto-section">
@@ -140,15 +140,17 @@ function guessSuit(imgData){
 function isGreenPixel(r,g,b){return r<60&&g>50&&b<130&&g>r+8&&g>b}
 
 function findTileBoundaries(imgData,w,h){
-  var d=imgData.data,step=3;var gaps=[];
-  for(var x=step;x<w-step;x+=step){var dark=0,total=0;for(var y=0;y<h;y+=step){var i=(y*w+x)*4;total++;if(d[i]<60&&d[i+1]<60&&d[i+2]<60)dark++}if(dark/total>0.3)gaps.push(x)}
-  var tiles=[];var minX=w,maxX=0;
+  var d=imgData.data,step=4;
+  // Find horizontal extent of white tiles
+  var minX=w,maxX=0;
   for(var x=0;x<w;x+=2){for(var y=0;y<h;y+=2){var i=(y*w+x)*4;if(d[i]>180&&d[i+1]>180&&d[i+2]>180){if(x<minX)minX=x;if(x>maxX)maxX=x}}}
-  if(maxX<=minX)return tiles;
-  var avgTileW=(maxX-minX)/14;var startX=minX;
-  for(var j=0;j<gaps.length;j++){if(j>0&&gaps[j]-gaps[j-1]>avgTileW*0.5){tiles.push({x:startX,y:0,w:gaps[j-1]-startX,h:h});startX=gaps[j]}}
-  if(gaps.length>0)tiles.push({x:startX,y:0,w:maxX-startX,h:h});
-  else{for(var j=0;j<14;j++){tiles.push({x:minX+j*avgTileW,y:0,w:avgTileW,h:h})}}
+  if(maxX<=minX)return [];
+  var tileSpan=maxX-minX;
+  // Digital game tiles are evenly spaced - just divide into 13 or 14 tiles
+  // Try 14 tiles first
+  var tileW=Math.floor(tileSpan/14);
+  var tiles=[];
+  for(var j=0;j<14;j++){tiles.push({x:minX+j*tileW,y:0,w:tileW,h:h})}
   return tiles;
 }
 
@@ -174,18 +176,27 @@ function analyzeFrame(canvas){
   if(greenStart<0){log('❌ 未找到绿色桌面区域');return[]}
   log('🟢 桌面: y='+greenStart+'-'+greenEnd+' ('+(greenEnd-greenStart)+'px)');
   
-  // Find hand tiles: scan DOWNWARD from greenEnd
-  // Hand tiles are right after the green table, they have white pixels
-  var handTop=greenEnd;var handBottom=greenEnd;
-  var maxSearch=Math.min(h,greenEnd+150);
-  
-  for(var y=greenEnd;y<maxSearch;y+=step){
-    var rowWhite=0,rowDark=0,total=0;
-    for(var x=0;x<w;x+=step){var i=(y*w+x)*4;total++;if(d[i]>180&&d[i+1]>180&&d[i+2]>180)rowWhite++;if(d[i]<30&&d[i+1]<30&&d[i+2]<30)rowDark++}
-    if(rowWhite/total>0.15&&handTop===greenEnd){handTop=y}
-    if(rowDark/total>0.5&&handTop>greenEnd){handBottom=y;break}
-    if(y===maxSearch-step){handBottom=y}
+  // Find hand tiles: scan UPWARD from the bottom of the green zone
+  // Hand tiles have significant white pixels in the middle of the row
+  // They sit INSIDE the green zone, near the bottom
+  var handTop=-1,handBottom=-1;
+  var midStart=Math.floor(w*0.15),midEnd=Math.floor(w*0.85),midW=midEnd-midStart;
+  // Scan from bottom of green zone upward
+  for(var i=0;i<greenProfile.length;i++){
+    var y=greenProfile[i].y;
+    if(y>greenEnd+5||y<greenStart-5)continue;
+    var midWhite=0;for(var x=midStart;x<midEnd;x+=step){var idx=(y*w+x)*4;if(d[idx]>180&&d[idx+1]>180&&d[idx+2]>180)midWhite++}
+    var midWhiteRatio=midWhite/(midW/step);
+    if(midWhiteRatio>0.3){
+      if(handBottom<0)handBottom=y+step;
+      handTop=y;
+    }else if(handBottom>0){break}
   }
+  if(handTop<0){log('❌ 未找到手牌白色区域');return[]}
+  // Trim hand area: find where white content actually starts/ends vertically
+  var bestTop=handTop,bestBot=handBottom;
+  for(var y=handTop;y<=handBottom;y+=2){var white=0,total=0;for(var x=midStart;x<midEnd;x+=step){var idx=(y*w+x)*4;total++;if(d[idx]>180&&d[idx+1]>180&&d[idx+2]>180)white++}if(white/total>0.4){if(y<bestTop)bestTop=y;if(y>bestBot)bestBot=y}}
+  handTop=bestTop;handBottom=bestBot+2;
   
   var handHeight=handBottom-handTop;
   if(handHeight<20){log('⚠️ 手牌区域太小:'+handHeight+'px');return[]}
@@ -227,13 +238,13 @@ function clearDiscards(){discards=new Array(27).fill(0);updateDiscardUI()}
 function updateDiscardUI(){var pool=document.getElementById('discardPool');pool.innerHTML='';for(var i=0;i<27;i++){for(var c=0;c<discards[i];c++){var d=document.createElement('div');d.className='discard-tile '+getSuit(i);d.textContent=TN[i%9];pool.appendChild(d)}}}
 function populateAddSelect(){var sel=document.getElementById('addTileSel');var nums=['一','二','三','四','五','六','七','八','九'];var suits=[['wan','万'],['tiao','条'],['tong','筒']];for(var s of suits){for(var n of nums){var opt=document.createElement('option');opt.value=n+s[0];opt.textContent=n+s[1];sel.appendChild(opt)}}}
 
-async function startAuto(){isAuto=true;document.getElementById('btnStart').style.display='none';document.getElementById('btnStop').style.display='';document.getElementById('autoDot').className='auto-dot try';document.getElementById('autoText').textContent='连接中...';log('▶ v16.2c 启动');tryAutoConnect()}
+async function startAuto(){isAuto=true;document.getElementById('btnStart').style.display='none';document.getElementById('btnStop').style.display='';document.getElementById('autoDot').className='auto-dot try';document.getElementById('autoText').textContent='连接中...';log('▶ v16.2d 启动');tryAutoConnect()}
 async function tryAutoConnect(){if(!isAuto)return;try{var r=await fetch(APP_URL+'/api/status',{cache:'no-store',signal:AbortSignal.timeout(3000)});if(r.ok){var i=await r.json();if(i.running){document.getElementById('autoDot').className='auto-dot on';document.getElementById('autoText').textContent='✅ 已连接';autoLoop();return}}}catch(e){log('❌ '+e.message)}document.getElementById('autoDot').className='auto-dot off';document.getElementById('autoText').textContent='❌ 3秒后重试';autoTimer=setTimeout(tryAutoConnect,3000)}
 async function autoLoop(){if(!isAuto)return;try{var r=await fetch(APP_URL+'/api/screenshot?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(3000)});if(r.ok){var b=await r.blob();if(b.size<1000){log('⚠️ 截图太小');autoTimer=setTimeout(autoLoop,1500);return}var img=new Image();img.onload=function(){var c=document.getElementById('cvs');c.width=img.width;c.height=img.height;c.getContext('2d').drawImage(img,0,0);c.style.display='block';document.getElementById('noSrc').style.display='none';log('📸 '+img.width+'x'+img.height);var res=analyzeFrame(c);if(res.length>0){lastGoodResult=res;applyOcrResult(res)}else if(lastGoodResult){log('⚠️ 沿用上次')}};img.onerror=function(){log('❌ 加载失败')};img.src=URL.createObjectURL(b)}}catch(e){log('❌ '+e.message)}autoTimer=setTimeout(autoLoop,1200)}
 function stopAuto(){isAuto=false;if(autoTimer){clearTimeout(autoTimer);autoTimer=null}document.getElementById('btnStart').style.display='';document.getElementById('btnStop').style.display='none';document.getElementById('autoDot').className='auto-dot off';document.getElementById('autoText').textContent='已停止'}
 function snapOnce(){if(!isAuto)startAuto()}
 
-window.onload=function(){loadLearnedTemplates();loadAllTemplates();populateAddSelect();log('🀄 v16.2c 就绪 模板:'+Object.keys(TILE_TEMPLATES).length+'个')};
+window.onload=function(){loadLearnedTemplates();loadAllTemplates();populateAddSelect();log('🀄 v16.2d 就绪 模板:'+Object.keys(TILE_TEMPLATES).length+'个')};
 </script>
 </body>
 </html>
