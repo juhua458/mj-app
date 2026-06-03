@@ -76,14 +76,8 @@ class ScreenCaptureService : Service() {
             intent?.getParcelableExtra("RESULT_DATA")
         }
 
-        // 获取屏幕尺寸
-        val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        wm.defaultDisplay.getMetrics(metrics)
-        screenWidth = metrics.widthPixels * 3 / 4
-        screenHeight = metrics.heightPixels * 3 / 4
-        screenDensity = metrics.densityDpi * 3 / 4
+        // 获取屏幕尺寸（setupVirtualDisplay会重新获取，这里只初始化）
+        // screenWidth/screenHeight 会在 setupVirtualDisplay 中正确设置
 
         val notification = createNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -113,15 +107,7 @@ class ScreenCaptureService : Service() {
                 }
             }, handler)
 
-            imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
-
-            virtualDisplay = mediaProjection?.createVirtualDisplay(
-                "MJScreenCapture",
-                screenWidth, screenHeight, screenDensity,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader?.surface,
-                null, null
-            )
+            setupVirtualDisplay()
 
             lastError = ""
             captureCount = 0
@@ -130,6 +116,7 @@ class ScreenCaptureService : Service() {
             handler.postDelayed(object : Runnable {
                 override fun run() {
                     if (isRunning) {
+                        checkAndRecreateDisplay()
                         captureScreen()
                         handler.postDelayed(this, 800)
                     }
@@ -140,6 +127,65 @@ class ScreenCaptureService : Service() {
             e.printStackTrace()
             isRunning = false
             stopSelf()
+        }
+    }
+
+    private fun setupVirtualDisplay() {
+        val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        wm.defaultDisplay.getMetrics(metrics)
+        val newWidth = metrics.widthPixels * 3 / 4
+        val newHeight = metrics.heightPixels * 3 / 4
+        val newDensity = metrics.densityDpi * 3 / 4
+
+        screenWidth = newWidth
+        screenHeight = newHeight
+        screenDensity = newDensity
+
+        imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
+        virtualDisplay = mediaProjection?.createVirtualDisplay(
+            "MJScreenCapture",
+            screenWidth, screenHeight, screenDensity,
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+            imageReader?.surface,
+            null, null
+        )
+    }
+
+    private fun checkAndRecreateDisplay() {
+        try {
+            val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay.getMetrics(metrics)
+            val newWidth = metrics.widthPixels * 3 / 4
+            val newHeight = metrics.heightPixels * 3 / 4
+
+            // If dimensions changed (screen rotated), recreate VirtualDisplay
+            if (newWidth != screenWidth || newHeight != screenHeight) {
+                try {
+                    virtualDisplay?.release()
+                } catch (_: Exception) {}
+                try {
+                    imageReader?.close()
+                } catch (_: Exception) {}
+
+                screenWidth = newWidth
+                screenHeight = newHeight
+                screenDensity = metrics.densityDpi * 3 / 4
+
+                imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
+                virtualDisplay = mediaProjection?.createVirtualDisplay(
+                    "MJScreenCapture",
+                    screenWidth, screenHeight, screenDensity,
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                    imageReader?.surface,
+                    null, null
+                )
+            }
+        } catch (e: Exception) {
+            lastError = "重建显示失败: ${e.message}"
         }
     }
 

@@ -159,8 +159,10 @@ function findTileBoundaries(imgData,w,h){
 function analyzeFrame(canvas){
   if(!templatesReady){log('⏳ 模板未加载');return[]}
   var ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
+  var isLandscape=w>h;
+  log('📐 '+(isLandscape?'横屏':'竖屏')+' '+w+'x'+h);
   var imgData=ctx.getImageData(0,0,w,h),d=imgData.data;
-  var step=Math.max(4,Math.floor(w/200));
+  var step=Math.max(4,Math.floor((isLandscape?h:w)/200));
   
   // Scan rows for green percentage
   var greenProfile=[];
@@ -180,7 +182,8 @@ function analyzeFrame(canvas){
   
   // Find hand tiles: scan FROM BOTTOM UPWARD within green zone
   var handTop=-1,handBottom=-1;
-  var midStart=Math.floor(w*0.1),midEnd=Math.floor(w*0.9),midW=midEnd-midStart;
+  // In landscape, hand cards are in the center 60% of width; in portrait, 80%
+  var midStart=Math.floor(w*(isLandscape?0.05:0.1)),midEnd=Math.floor(w*(isLandscape?0.65:0.9)),midW=midEnd-midStart;
   for(var i=greenProfile.length-1;i>=0;i--){
     var y=greenProfile[i].y;
     if(y>greenEnd+5||y<greenStart-5)continue;
@@ -192,8 +195,8 @@ function analyzeFrame(canvas){
     }else if(handBottom>0){break}
   }
   if(handTop<0){
-    // Fallback: scan bottom 15% of screen directly (full-screen game mode)
-    var fallbackTop=Math.floor(h*0.85),fallbackBot=h;
+    // Fallback: scan bottom portion of screen directly (full-screen game mode)
+    var fallbackTop=Math.floor(h*(isLandscape?0.75:0.85)),fallbackBot=h;
     for(var y=fallbackTop;y<fallbackBot;y+=step){
       var midWhite=0;for(var x=midStart;x<midEnd;x+=step){var idx=(y*w+x)*4;if(d[idx]>155&&d[idx+1]>155&&d[idx+2]>155)midWhite++}
       var midWhiteRatio=midWhite/(midW/step);

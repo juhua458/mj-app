@@ -161,17 +161,37 @@ class FloatingService : Service() {
 
         floatingView = container
 
-        // Window params - overlay on top of everything
+        // Detect landscape vs portrait
+        val screenHeight = dm.heightPixels
+        val isLandscape = screenWidth > screenHeight
+
+        // Window params - sidebar for landscape, compact for portrait
+        var winW: Int
+        var winH: Int
+        var winGravity: Int
+        if (isLandscape) {
+            // Landscape: narrow right sidebar
+            winW = (screenWidth * 0.18).toInt().coerceIn(280, 400)
+            winH = screenHeight
+            winGravity = Gravity.END or Gravity.TOP
+        } else {
+            // Portrait: compact floating card at top
+            winW = (screenWidth * 0.7).toInt()
+            winH = (winW * 0.9).toInt()
+            winGravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        }
+
         val params = WindowManager.LayoutParams(
-            (screenWidth * 0.92).toInt(),
-            (screenWidth * 0.92 * 1.1).toInt(), // slightly taller than wide
+            winW,
+            winH,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = 60 // slight offset from top
+            gravity = winGravity
+            x = 0
+            y = if (isLandscape) 0 else 40
         }
 
         // Make the top bar draggable
@@ -216,13 +236,20 @@ class FloatingService : Service() {
         val dm = DisplayMetrics()
         windowManager?.defaultDisplay?.getMetrics(dm)
         val screenWidth = dm.widthPixels
+        val screenHeight = dm.heightPixels
+        val isLandscape = screenWidth > screenHeight
 
         val params = floatingView?.layoutParams as? WindowManager.LayoutParams ?: return
         if (isExpanded) {
-            params.width = (screenWidth * 0.92).toInt()
-            params.height = (screenWidth * 0.92 * 1.1).toInt()
+            if (isLandscape) {
+                params.width = (screenWidth * 0.18).toInt().coerceIn(280, 400)
+                params.height = screenHeight
+            } else {
+                params.width = (screenWidth * 0.7).toInt()
+                params.height = (params.width * 0.9).toInt()
+            }
         } else {
-            params.width = (screenWidth * 0.6).toInt()
+            params.width = if (isLandscape) 160 else (screenWidth * 0.4).toInt()
             params.height = WindowManager.LayoutParams.WRAP_CONTENT
         }
         windowManager?.updateViewLayout(floatingView, params)
