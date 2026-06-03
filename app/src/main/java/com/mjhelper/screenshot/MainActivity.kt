@@ -121,7 +121,11 @@ class MainActivity : AppCompatActivity() {
     private fun launchFloatingHelper() {
         try {
             val intent = Intent(this, FloatingService::class.java)
-            startService(intent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
             Toast.makeText(this, "🀄 悬浮提示器已启动！切到微乐麻将", Toast.LENGTH_LONG).show()
 
             // Go home so user can see the game

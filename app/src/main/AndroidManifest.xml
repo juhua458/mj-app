@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 悬浮窗权限 -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Android 14+ 悬浮窗前台服务 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:allowBackup="false"
@@ -16,6 +18,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MjScreenshot"
         android:usesCleartextTraffic="true">
+
+        <property
+            android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+            android:value="Floating overlay window for mahjong game assistance" />
 
         <activity
             android:name=".MainActivity"
@@ -48,6 +54,7 @@
         <!-- 悬浮窗服务 -->
         <service
             android:name=".FloatingService"
+            android:foregroundServiceType="specialUse"
             android:exported="false" />
 
     </application>
