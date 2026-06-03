@@ -15,7 +15,11 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * ONNX Runtime 麻将牌识别引擎 v6
+ * ONNX Runtime 麻将牌识别引擎 v7
+ * 
+ * v7修复:
+ * 1. ★ 关键BUG修复: ONNX输出格式选择逻辑 - 用tensor shape确定格式, 不再"盲猜选多"
+ *    旧BUG: [39,8400]数据被[8400,39]错读→更多假阳性→被选中→垃圾bbox→0手牌
  * 
  * v6修复:
  * 1. ★ 关键BUG修复: MediaProjection截屏可能是竖屏(832x1758), 需旋转90°变横屏再处理
@@ -307,6 +311,7 @@ class MahjongOnnxDetector(context: Context) {
     /**
      * 使用FloatBuffer解析ONNX输出, 不依赖类型转换
      * 支持 [1, 39, 8400] 和 [1, 8400, 39] 两种格式
+     * ★ v7关键修复: 用tensor shape确定正确格式, 不再"盲猜选多"(V22.1教训)
      */
     private fun postprocessFloatBuffer(
         outputValue: OnnxValue,
@@ -334,12 +339,13 @@ class MahjongOnnxDetector(context: Context) {
         buffer.rewind()
         val totalElements = buffer.remaining()
         
-        // 获取shape信息(如果可用)
-        val shapeStr = try {
-            tensor.info.shape.joinToString(",")
+        // 获取shape信息
+        val shape = try {
+            tensor.info.shape.map { it.toInt() }
         } catch (e: Exception) {
-            "unknown"
+            listOf(-1, -1, -1)
         }
+        val shapeStr = shape.joinToString(",")
         
         lastDebug = "tensor_shape=[$shapeStr] elements=$totalElements"
         
@@ -350,31 +356,63 @@ class MahjongOnnxDetector(context: Context) {
         val expectedSize = (4 + numClasses) * 8400
         if (totalElements != expectedSize) {
             lastDebug += " unexpected_size! expected=$expectedSize"
-            // 尝试继续处理
         }
+        
+        // ★ v7关键修复: 用shape确定正确格式, 不再"两种都试选多的"
+        // 旧逻辑: parseFlat39x8400和parseFlat8400x39都跑一遍, 选检测数更多的
+        // 旧BUG: [39,8400]格式数据被[8400,39]错读→更多假阳性→被选中→垃圾bbox→0手牌
+        val numAnchors = 8400
         
         val d1 = mutableListOf<Detection>()
         val d2 = mutableListOf<Detection>()
         
-        // 格式1: [39, 8400] 按行优先
-        // data[c * 8400 + a] = value at [c][a]
-        try {
-            parseFlat39x8400(data, 8400, origW, origH, scale, padX, padY, confThreshold, numClasses, d1)
-        } catch (e: Exception) {
-            lastDebug += " fmt1_err:${e.message}"
+        when {
+            // shape=[1, 39, 8400] → 第2维是39(4bbox+35class), 用格式1
+            shape.size >= 3 && shape[1] == 39 && shape[2] == numAnchors -> {
+                try {
+                    parseFlat39x8400(data, numAnchors, origW, origH, scale, padX, padY, confThreshold, numClasses, d1)
+                } catch (e: Exception) {
+                    lastDebug += " fmt1_err:${e.message}"
+                }
+                lastDebug += " fmt=1[39,8400] d1=${d1.size}"
+                detections.addAll(d1)
+            }
+            // shape=[1, 8400, 39] → 第2维是8400(anchors), 用格式2
+            shape.size >= 3 && shape[1] == numAnchors && shape[2] == 39 -> {
+                try {
+                    parseFlat8400x39(data, 39, origW, origH, scale, padX, padY, confThreshold, numClasses, d2)
+                } catch (e: Exception) {
+                    lastDebug += " fmt2_err:${e.message}"
+                }
+                lastDebug += " fmt=2[8400,39] d2=${d2.size}"
+                detections.addAll(d2)
+            }
+            // shape未知→两种都试, 选检测数更合理的(而非更多的)
+            else -> {
+                try {
+                    parseFlat39x8400(data, numAnchors, origW, origH, scale, padX, padY, confThreshold, numClasses, d1)
+                } catch (e: Exception) {
+                    lastDebug += " fmt1_err:${e.message}"
+                }
+                try {
+                    parseFlat8400x39(data, 39, origW, origH, scale, padX, padY, confThreshold, numClasses, d2)
+                } catch (e: Exception) {
+                    lastDebug += " fmt2_err:${e.message}"
+                }
+                lastDebug += " fmt=unknown fmt1=${d1.size} fmt2=${d2.size}"
+                // ★ 不选"更多的", 选"更合理的" - 正常检测应在50-300范围
+                // 错误格式会产生异常多假阳性(>300)或异常少(<5)
+                val d1Reasonable = d1.size in 5..300
+                val d2Reasonable = d2.size in 5..300
+                detections.addAll(when {
+                    d1Reasonable && !d2Reasonable -> d1
+                    d2Reasonable && !d1Reasonable -> d2
+                    d1Reasonable && d2Reasonable -> if (d1.size <= d2.size) d1 else d2  // 都合理选少的(少=更精确)
+                    else -> d1  // 都不合理, 默认格式1
+                })
+            }
         }
         
-        // 格式2: [8400, 39] 按行优先
-        // data[a * 39 + v] = value at [a][v]
-        try {
-            parseFlat8400x39(data, 39, origW, origH, scale, padX, padY, confThreshold, numClasses, d2)
-        } catch (e: Exception) {
-            lastDebug += " fmt2_err:${e.message}"
-        }
-        
-        lastDebug += " fmt1=${d1.size} fmt2=${d2.size}"
-        
-        detections.addAll(if (d1.size >= d2.size) d1 else d2)
         return detections
     }
     
