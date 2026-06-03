@@ -1,7 +1,11 @@
 package com.mjhelper.screenshot
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.os.Build
 import android.os.IBinder
 import fi.iki.elonen.NanoHTTPD
 import java.io.ByteArrayInputStream
@@ -11,6 +15,8 @@ class HttpServerService : Service() {
 
     private var server: NanoHTTPD? = null
     private var helperHtml: String? = null
+    private val CHANNEL_ID = "mj_http"
+    private val NOTIFICATION_ID = 3
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -28,11 +34,25 @@ class HttpServerService : Service() {
         return helperHtml ?: ""
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "STOP") {
             server?.stop()
             server = null
+            stopSelf()
             return START_NOT_STICKY
+        }
+
+        // Must be foreground service to survive in background on Android 12+
+        val notification = createNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
         }
 
         if (server == null) {
@@ -91,5 +111,34 @@ class HttpServerService : Service() {
         server?.stop()
         server = null
         super.onDestroy()
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID, "麻将HTTP服务", NotificationManager.IMPORTANCE_LOW
+            ).apply { description = "HTTP服务运行中" }
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun createNotification(): Notification {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CHANNEL_ID)
+                .setContentTitle("🀄 麻将截屏助手")
+                .setContentText("HTTP服务运行中")
+                .setSmallIcon(android.R.drawable.ic_menu_share)
+                .setOngoing(true)
+                .build()
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+                .setContentTitle("🀄 麻将截屏助手")
+                .setContentText("HTTP服务运行中")
+                .setSmallIcon(android.R.drawable.ic_menu_share)
+                .setOngoing(true)
+                .build()
+        }
     }
 }

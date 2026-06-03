@@ -40,7 +40,7 @@ class MainActivity : AppCompatActivity() {
                 startForegroundService(serviceIntent)
 
                 val httpIntent = Intent(this, HttpServerService::class.java).apply { action = "START" }
-                startService(httpIntent)
+                startForegroundService(httpIntent)
 
                 isRunning = true
                 updateUI()

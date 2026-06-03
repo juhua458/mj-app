@@ -49,6 +49,7 @@
         <!-- HTTP服务器服务 -->
         <service
             android:name=".HttpServerService"
+            android:foregroundServiceType="specialUse"
             android:exported="false" />
 
         <!-- 悬浮窗服务 -->
