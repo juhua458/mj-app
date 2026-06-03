@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>🀄 捉鸡麻将提示器 v19.0</title>
+<title>🀄 捉鸡麻将提示器 v20.0</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{--bg:#0a0e1a;--bg2:#131825;--card:#1c2333;--text:#e8edf5;--text2:#8b95a8;--red:#e54545;--green:#2ebd5e;--blue:#4a8eff;--gold:#f0a030;--purple:#9b5dff}
@@ -17,7 +17,8 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 .status-dot.off{background:var(--red)}
 .status-dot.try{background:var(--gold);animation:blink .5s infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-.status-text{font-size:.65rem;color:var(--text2)}
+.status-text{font-size:.65rem;color:var(--text2);flex:1}
+.reload-btn{font-size:.55rem;padding:2px 8px;border-radius:4px;background:var(--gold);color:#000;border:none;font-weight:700;cursor:pointer;flex-shrink:0}
 .ctrl-btns{display:flex;gap:4px;padding:4px 8px;background:var(--bg2);flex-shrink:0}
 .cbtn{flex:1;padding:6px;border:none;border-radius:6px;font-size:.7rem;font-weight:700;cursor:pointer;color:#fff}
 .cbtn.start{background:linear-gradient(135deg,var(--green),#1a9c4a)}
@@ -35,6 +36,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 .chip.ok{background:rgba(46,189,94,.2);color:var(--green)}.chip.warn{background:rgba(240,160,48,.2);color:var(--gold)}
 .chip.cnt{background:rgba(155,93,255,.2);color:var(--purple)}
 .chip.conf{background:rgba(74,142,255,.2);color:var(--blue)}
+.model-error{padding:6px 8px;background:rgba(229,69,69,.15);border:1px solid rgba(229,69,69,.3);border-radius:6px;margin:4px 8px;font-size:.6rem;color:var(--red);flex-shrink:0;display:none}
 .strategy{padding:6px 8px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .best-card{background:var(--card);border-radius:8px;padding:10px;border:2px solid rgba(240,160,48,.4);margin-bottom:6px}
 .best-label{font-size:.65rem;color:var(--gold);margin-bottom:4px;font-weight:600}
@@ -53,14 +55,20 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 .discard-add{display:flex;gap:4px;margin-top:3px}
 .discard-add select{flex:1;padding:2px;border-radius:3px;background:var(--card);color:var(--text);border:none;font-size:.6rem}
 .discard-add button{padding:2px 10px;border-radius:3px;background:var(--gold);color:#000;border:none;font-size:.6rem;font-weight:700}
-.debug{padding:2px 6px;background:#111;font-size:.5rem;color:#0f0;max-height:60px;overflow-y:auto;font-family:monospace;flex-shrink:0;white-space:pre-wrap;word-break:break-all;border-top:1px solid #333}
+.debug{padding:2px 6px;background:#111;font-size:.5rem;color:#0f0;max-height:80px;overflow-y:auto;font-family:monospace;flex-shrink:0;white-space:pre-wrap;word-break:break-all;border-top:1px solid #333}
 .debug-toggle{font-size:.55rem;color:var(--text2);padding:2px 8px;background:var(--bg2);cursor:pointer;flex-shrink:0;text-align:center}
+.resize-hint{font-size:.5rem;color:var(--text2);padding:2px 8px;background:var(--bg2);text-align:center;flex-shrink:0}
 </style>
 </head>
 <body>
 <div class="app">
-<div class="top-bar"><h1>🀄 v19.0 YOLO</h1></div>
-<div class="status-row"><div class="status-dot off" id="statusDot"></div><span class="status-text" id="statusText">未启动</span></div>
+<div class="top-bar"><h1>🀄 v20.0 YOLO</h1></div>
+<div class="status-row">
+<div class="status-dot off" id="statusDot"></div>
+<span class="status-text" id="statusText">未启动</span>
+<button class="reload-btn" id="btnReload" onclick="reloadModel()" style="display:none">🔄重试</button>
+</div>
+<div class="model-error" id="modelError"></div>
 <div class="ctrl-btns">
 <button id="btnStart" class="cbtn start" onclick="startAuto()">▶ 启动</button>
 <button id="btnStop" class="cbtn stop" onclick="stopAuto()" style="display:none">⏹ 停止</button>
@@ -88,6 +96,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 <div class="discard-pool" id="discardPool"></div>
 <div class="discard-add"><select id="addTileSel"></select><button onclick="addDiscard()">+添加</button></div>
 </div>
+<div class="resize-hint">◀ 拖拽左边缘调整宽度</div>
 <div class="debug-toggle" onclick="toggleDebug()">调试信息 ▶</div>
 <div class="debug" id="debugPanel" style="display:none"></div>
 </div>
@@ -101,6 +110,7 @@ var handSize=0;
 var isAuto=false;
 var autoTimer=null;
 var debugVisible=false;
+var modelLoadRetries=0;
 
 function log(s){var p=document.getElementById('debugPanel');if(p)p.textContent+=s+'\n';if(p)p.scrollTop=p.scrollHeight}
 function toggleDebug(){debugVisible=!debugVisible;document.getElementById('debugPanel').style.display=debugVisible?'block':'none';document.querySelector('.debug-toggle').textContent=debugVisible?'调试信息 ▼':'调试信息 ▶'}
@@ -109,28 +119,24 @@ function getSuit(i){return i<9?'wan':i<18?'tiao':'tong'}
 function getSuitName(i){return i<9?'万':i<18?'条':'筒'}
 function getSuitChar(i){return i<9?'m':i<18?'s':'p'}
 
-// YOLO short name to hand index: 1m->0, 2m->1, ..., 9m->8, 1p->18, ..., 9p->26, 1s->9, ..., 9s->17, 1z-7z ignored for now
 function shortToIdx(s){
   if(!s||s.length<2)return -1;
   var num=parseInt(s[0]);
   var suit=s[1];
   if(isNaN(num)||num<1||num>9)return -1;
-  if(suit==='m')return num-1;      // 万: 0-8
-  if(suit==='s')return 9+num-1;    // 条: 9-17
-  if(suit==='p')return 18+num-1;   // 筒: 18-26
-  return -1; // 字牌暂不纳入策略
+  if(suit==='m')return num-1;
+  if(suit==='s')return 9+num-1;
+  if(suit==='p')return 18+num-1;
+  return -1;
 }
 
 // ============ 向听数计算器 ============
 function calcShanten(h){
-  // h: 27-element array (万0-8, 条9-17, 筒18-26)
   var minShanten=8;
-  // Try each tile as the pair
   for(var p=0;p<27;p++){
     if(h[p]<2)continue;
     h[p]-=2;
     var mentsu=0,taatsu=0;
-    // Process each suit separately
     for(var s=0;s<3;s++){
       var tiles=[];
       for(var i=0;i<9;i++)tiles.push(h[s*9+i]);
@@ -141,8 +147,6 @@ function calcShanten(h){
     var sh=8-2*mentsu-Math.min(taatsu,4-mentsu);
     if(sh<minShanten)minShanten=sh;
   }
-  // Also try without a pair (looking for 4 mentsu + 1 pair = tenpai = shanten -1 concept)
-  // Try no-pair case: mentsu + taatsu where one taatsu can become the pair
   {
     var mentsu2=0,taatsu2=0;
     for(var s=0;s<3;s++){
@@ -151,7 +155,6 @@ function calcShanten(h){
       var r=analyzeSuit(tiles);
       mentsu2+=r.mentsu;taatsu2+=r.taatsu;
     }
-    // Without pair, need one more tile for pair
     var sh2=8-2*mentsu2-Math.min(taatsu2,4-mentsu2)+1;
     if(sh2<minShanten)minShanten=sh2;
   }
@@ -159,15 +162,12 @@ function calcShanten(h){
 }
 
 function analyzeSuit(t){
-  // t: 9-element array for one suit
-  // Returns {mentsu, taatsu} - best decomposition
   var best={mentsu:0,taatsu:0};
   _dfsSuit(t,0,0,0,best);
   return best;
 }
 
 function _dfsSuit(t,pos,mentsu,taatsu,best){
-  // Skip zeros
   while(pos<9&&t[pos]===0)pos++;
   if(pos>=9){
     var total=mentsu+taatsu;
@@ -175,35 +175,18 @@ function _dfsSuit(t,pos,mentsu,taatsu,best){
     else if(total===best.mentsu+best.taatsu&&mentsu>best.mentsu){best.mentsu=mentsu;best.taatsu=taatsu}
     return;
   }
-  // Try triplet (刻子)
-  if(t[pos]>=3){
-    t[pos]-=3;_dfsSuit(t,pos,mentsu+1,taatsu,best);t[pos]+=3;
-  }
-  // Try sequence (顺子)
-  if(pos<=6&&t[pos]>=1&&t[pos+1]>=1&&t[pos+2]>=1){
-    t[pos]--;t[pos+1]--;t[pos+2]--;_dfsSuit(t,pos,mentsu+1,taatsu,best);t[pos]++;t[pos+1]++;t[pos+2]++;
-  }
-  // Try pair (对子/搭子)
-  if(t[pos]>=2){
-    t[pos]-=2;_dfsSuit(t,pos,mentsu,taatsu+1,best);t[pos]+=2;
-  }
-  // Try partial sequence (两面/嵌张)
-  if(pos<=7&&t[pos]>=1&&t[pos+1]>=1){
-    t[pos]--;t[pos+1]--;_dfsSuit(t,pos,mentsu,taatsu+1,best);t[pos]++;t[pos+1]++;
-  }
-  if(pos<=6&&t[pos]>=1&&t[pos+2]>=1){
-    t[pos]--;t[pos+2]--;_dfsSuit(t,pos,mentsu,taatsu+1,best);t[pos]++;t[pos+2]++;
-  }
-  // Skip this tile (isolated)
-  if(t[pos]>0){
-    var v=t[pos];t[pos]=0;_dfsSuit(t,pos,mentsu,taatsu,best);t[pos]=v;
-  }
+  if(t[pos]>=3){t[pos]-=3;_dfsSuit(t,pos,mentsu+1,taatsu,best);t[pos]+=3}
+  if(pos<=6&&t[pos]>=1&&t[pos+1]>=1&&t[pos+2]>=1){t[pos]--;t[pos+1]--;t[pos+2]--;_dfsSuit(t,pos,mentsu+1,taatsu,best);t[pos]++;t[pos+1]++;t[pos+2]++}
+  if(t[pos]>=2){t[pos]-=2;_dfsSuit(t,pos,mentsu,taatsu+1,best);t[pos]+=2}
+  if(pos<=7&&t[pos]>=1&&t[pos+1]>=1){t[pos]--;t[pos+1]--;_dfsSuit(t,pos,mentsu,taatsu+1,best);t[pos]++;t[pos+1]++}
+  if(pos<=6&&t[pos]>=1&&t[pos+2]>=1){t[pos]--;t[pos+2]--;_dfsSuit(t,pos,mentsu,taatsu+1,best);t[pos]++;t[pos+2]++}
+  if(t[pos]>0){var v=t[pos];t[pos]=0;_dfsSuit(t,pos,mentsu,taatsu,best);t[pos]=v}
 }
 
 function recommendDiscard(h,handSize){
   if(handSize<2)return{tile:'-',reason:'牌太少',shanten:8};
   var curShanten=calcShanten(h);
-  var bestShanten=99,bestIdx=-1,bestReason='';
+  var bestShanten=99,bestIdx=-1;
   var candidates=[];
   for(var i=0;i<27;i++){
     if(h[i]<=0)continue;
@@ -214,7 +197,6 @@ function recommendDiscard(h,handSize){
     if(sh<bestShanten){bestShanten=sh;bestIdx=i}
   }
   if(bestIdx<0)return{tile:'-',reason:'无牌可弃',shanten:curShanten};
-  // Sort candidates by shanten
   candidates.sort(function(a,b){return a.shanten-b.shanten});
   var best=candidates[0];
   var tileName=TN[best.idx%9]+getSuitName(best.idx);
@@ -222,7 +204,6 @@ function recommendDiscard(h,handSize){
   if(best.shanten<curShanten)reason='向听数 -1 ✅';
   else if(best.shanten===curShanten)reason='向听数不变';
   else reason='向听数 +1 ⚠️';
-  // If multiple candidates with same shanten, note alternatives
   var sameSh=candidates.filter(function(c){return c.shanten===best.shanten});
   if(sameSh.length>1){
     var altNames=sameSh.slice(1,4).map(function(c){return TN[c.idx%9]+getSuitName(c.idx)}).join(' ');
@@ -247,7 +228,6 @@ function applyRecognition(data){
   var tiles=data.tiles;
   if(tiles.length===0){log('⚠️ 未识别到牌');return}
   
-  // Reset hand
   hand=new Array(27).fill(0);
   var recognized=0;
   for(var i=0;i<tiles.length;i++){
@@ -296,7 +276,7 @@ function updateStrategy(){
   reasonEl.textContent=rec.reason;
   
   var shClass=rec.shanten<=1?'good':(rec.shanten<=3?'mid':'bad');
-  var shLabel=rec.shanten<=0?'听牌！':(rec.shanten+'向听');
+  var shLabel=rec.shanten===0?'听牌！':(rec.shanten+'向听');
   shantenEl.innerHTML='<span class="shanten-chip '+shClass+'">'+shLabel+'</span>';
 }
 
@@ -320,6 +300,50 @@ function populateAddSelect(){
   for(var s=0;s<3;s++){var sn=['万','条','筒'][s];for(var n=0;n<9;n++){var opt=document.createElement('option');opt.value=TN[n]+['m','s','p'][s];opt.textContent=TN[n]+sn;sel.appendChild(opt)}}
 }
 
+// ============ 模型重试 ============
+async function reloadModel(){
+  document.getElementById('btnReload').style.display='none';
+  document.getElementById('statusText').textContent='⏳ 重新加载模型...';
+  document.getElementById('modelError').style.display='none';
+  try{
+    await fetch(APP_URL+'/api/reload',{cache:'no-store',signal:AbortSignal.timeout(3000)});
+    log('🔄 已发送重新加载请求');
+  }catch(e){log('❌ 重试失败: '+e.message)}
+  // 等3秒后检查状态
+  setTimeout(checkModelStatus, 3000);
+}
+
+function showModelError(err){
+  var el=document.getElementById('modelError');
+  el.textContent='⚠️ 模型加载失败: '+err;
+  el.style.display='block';
+  document.getElementById('btnReload').style.display='';
+}
+
+function hideModelError(){
+  document.getElementById('modelError').style.display='none';
+  document.getElementById('btnReload').style.display='none';
+}
+
+async function checkModelStatus(){
+  try{
+    var r=await fetch(APP_URL+'/api/status',{cache:'no-store',signal:AbortSignal.timeout(3000)});
+    if(r.ok){
+      var i=await r.json();
+      if(i.modelLoaded){
+        hideModelError();
+        document.getElementById('statusDot').className='status-dot try';
+        document.getElementById('statusText').textContent='✅ 模型已加载'+(i.nnapi?' (NNAPI)':' (CPU)');
+        return true;
+      }else if(i.modelError && i.modelError !== ''){
+        showModelError(i.modelError);
+        return false;
+      }
+    }
+  }catch(e){}
+  return false;
+}
+
 // ============ 自动循环 ============
 async function startAuto(){
   isAuto=true;
@@ -327,7 +351,7 @@ async function startAuto(){
   document.getElementById('btnStop').style.display='';
   document.getElementById('statusDot').className='status-dot try';
   document.getElementById('statusText').textContent='连接中...';
-  log('▶ v19.0 启动 YOLO识别');
+  log('▶ v20.0 启动 YOLO识别');
   tryAutoConnect();
 }
 
@@ -337,13 +361,30 @@ async function tryAutoConnect(){
     var r=await fetch(APP_URL+'/api/status',{cache:'no-store',signal:AbortSignal.timeout(3000)});
     if(r.ok){
       var i=await r.json();
-      log('状态: model='+i.modelLoaded+' hasImg='+i.hasScreenshot);
+      log('状态: model='+i.modelLoaded+' hasImg='+i.hasScreenshot+' nnapi='+i.nnapi);
+      if(i.modelError && i.modelError !== '' && !i.modelLoaded){
+        showModelError(i.modelError);
+      }else{
+        hideModelError();
+      }
       if(i.modelLoaded&&i.hasScreenshot){
         document.getElementById('statusDot').className='status-dot on';
-        document.getElementById('statusText').textContent='✅ YOLO已连接';
+        document.getElementById('statusText').textContent='✅ YOLO已连接'+(i.nnapi?' (NNAPI)':' (CPU)');
         autoLoop();return;
       }
-      if(!i.modelLoaded){document.getElementById('statusText').textContent='⏳ 模型加载中...';}
+      if(!i.modelLoaded){
+        document.getElementById('statusText').textContent='⏳ 模型加载中...';
+        // 自动重试，最多5次
+        modelLoadRetries++;
+        if(modelLoadRetries>=5){
+          showModelError(i.modelError||'多次重试仍失败');
+        }else{
+          // 触发一次reload
+          if(modelLoadRetries===2){
+            fetch(APP_URL+'/api/reload',{cache:'no-store'}).catch(function(){});
+          }
+        }
+      }
       else{document.getElementById('statusText').textContent='⏳ 等待截图...';}
       autoTimer=setTimeout(tryAutoConnect,2000);return;
     }
@@ -368,6 +409,7 @@ async function autoLoop(){
 
 function stopAuto(){
   isAuto=false;
+  modelLoadRetries=0;
   if(autoTimer){clearTimeout(autoTimer);autoTimer=null}
   document.getElementById('btnStart').style.display='';
   document.getElementById('btnStop').style.display='none';
@@ -382,7 +424,7 @@ function snapOnce(){
   });
 }
 
-window.onload=function(){populateAddSelect();log('🀄 v19.0 YOLO识别就绪')};
+window.onload=function(){populateAddSelect();log('🀄 v20.0 YOLO识别就绪 - 左边缘拖拽调宽度')};
 </script>
 </body>
 </html>

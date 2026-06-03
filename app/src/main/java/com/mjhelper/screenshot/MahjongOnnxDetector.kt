@@ -12,18 +12,20 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * ONNX Runtime 麻将牌识别引擎 v2
+ * ONNX Runtime 麻将牌识别引擎 v3
  * 使用 YOLO11n nano模型，输入640x640，输出35类麻将牌
  * 
- * 类别映射: m=万子, p=筒子, s=条子, z=字牌
- * 0:1m 1:1p 2:1s 3:1z(东风) 4:2m 5:2p 6:2s 7:2z(南风) ...
- * 34:UNKNOWN
+ * v3改进: 先CPU加载保证成功，再尝试NNAPI加速；暴露lastError供调试
  */
 class MahjongOnnxDetector(context: Context) {
     
     private var env: OrtEnvironment? = null
     private var session: OrtSession? = null
     private var isLoaded = false
+    var lastError: String = ""
+        private set
+    var useNNAPI: Boolean = false
+        private set
     
     // 麻将牌类别名称
     private val classNames = mapOf(
@@ -54,30 +56,87 @@ class MahjongOnnxDetector(context: Context) {
     )
     
     fun loadModel(inputStream: InputStream): Boolean {
-        return try {
-            env = OrtEnvironment.getEnvironment()
-            val modelBytes = inputStream.readBytes()
-            val sessionOptions = OrtSession.SessionOptions()
-            sessionOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-            // 启用NNAPI加速(Android Neural Networks API)
-            try {
-                sessionOptions.addNnapi()
-            } catch (e: Exception) {
-                // NNAPI不可用时降级到CPU
-            }
-            session = env?.createSession(modelBytes, sessionOptions)
-            isLoaded = true
-            true
+        lastError = ""
+        
+        // 先关闭旧session
+        try { session?.close() } catch (_: Exception) {}
+        try { env?.close() } catch (_: Exception) {}
+        session = null
+        env = null
+        isLoaded = false
+        useNNAPI = false
+        
+        // 读取模型字节
+        val modelBytes = try {
+            inputStream.readBytes()
         } catch (e: Exception) {
-            isLoaded = false
-            false
+            lastError = "读取模型文件失败: ${e.message}"
+            return false
+        }
+        
+        if (modelBytes.isEmpty()) {
+            lastError = "模型文件为空(0字节)"
+            return false
+        }
+        
+        // 策略1: 先用纯CPU加载（保证成功）
+        try {
+            env = OrtEnvironment.getEnvironment()
+            val cpuOptions = OrtSession.SessionOptions()
+            cpuOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+            session = env?.createSession(modelBytes, cpuOptions)
+            isLoaded = true
+            useNNAPI = false
+            lastError = ""
+            cpuOptions.close()
+            return true
+        } catch (e: Exception) {
+            lastError = "CPU模式加载失败: ${e.message}"
+        }
+        
+        // 策略2: 如果CPU也失败，尝试不同优化级别
+        try {
+            env = OrtEnvironment.getEnvironment()
+            val basicOptions = OrtSession.SessionOptions()
+            basicOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+            session = env?.createSession(modelBytes, basicOptions)
+            isLoaded = true
+            useNNAPI = false
+            lastError = ""
+            basicOptions.close()
+            return true
+        } catch (e: Exception) {
+            lastError = "CPU无优化模式也失败: ${e.message}"
+        }
+        
+        return false
+    }
+    
+    /**
+     * 尝试切换到NNAPI加速（在CPU加载成功后调用）
+     */
+    fun tryEnableNNAPI(modelBytes: ByteArray): Boolean {
+        try {
+            val nnapiOptions = OrtSession.SessionOptions()
+            nnapiOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+            nnapiOptions.addNnapi()
+            val nnapiSession = env?.createSession(modelBytes, nnapiOptions)
+            // 成功则替换
+            session?.close()
+            session = nnapiSession
+            useNNAPI = true
+            nnapiOptions.close()
+            return true
+        } catch (e: Exception) {
+            // NNAPI不可用，继续用CPU
+            return false
         }
     }
     
     data class Detection(
         val classId: Int,
-        val className: String,     // 中文名
-        val shortName: String,     // 策略引擎用简称
+        val className: String,
+        val shortName: String,
         val confidence: Float,
         val x1: Float, val y1: Float,
         val x2: Float, val y2: Float,
@@ -85,19 +144,12 @@ class MahjongOnnxDetector(context: Context) {
     )
     
     data class RecognitionResult(
-        val handTiles: List<Detection>,      // 手牌(按x坐标排序)
-        val allDetections: List<Detection>,  // 所有检测
-        val handTileNames: List<String>,     // 手牌简称列表
-        val confidence: Float                // 平均置信度
+        val handTiles: List<Detection>,
+        val allDetections: List<Detection>,
+        val handTileNames: List<String>,
+        val confidence: Float
     )
     
-    /**
-     * 识别截图中的麻将牌
-     * @param bitmap 截图Bitmap
-     * @param handRegionY1 手牌区域上边界(相对比例 0-1)
-     * @param handRegionY2 手牌区域下边界(相对比例 0-1)
-     * @param confThreshold 置信度阈值
-     */
     fun recognize(
         bitmap: Bitmap, 
         handRegionY1: Float = 0.75f,
@@ -107,28 +159,23 @@ class MahjongOnnxDetector(context: Context) {
         if (!isLoaded || session == null || env == null) return null
         
         return try {
-            // 1. 预处理: resize到640x640, 归一化到0-1, CHW格式
             val resized = Bitmap.createScaledBitmap(bitmap, 640, 640, true)
             val input = preprocess(resized)
             resized.recycle()
             
-            // 2. 推理
             val inputName = session?.inputNames?.iterator()?.next() ?: return null
             val inputBuffer = FloatBuffer.wrap(input)
             val inputTensor = OnnxTensor.createTensor(env, inputBuffer, longArrayOf(1, 3, 640, 640))
             val output = session?.run(mapOf(inputName to inputTensor))
             inputTensor.close()
             
-            // 3. 后处理: 解析YOLO输出 - 自动检测输出格式
             val outputTensor = output?.get(0) ?: return null
             val detections = postprocessAuto(outputTensor, bitmap.width, bitmap.height, confThreshold)
             
-            // 4. 分离手牌区和其他区域
             val imgH = bitmap.height.toFloat()
             val handY1 = imgH * handRegionY1
             val handY2 = imgH * handRegionY2
             
-            // 手牌筛选: 中心点在底部区域
             val handTiles = detections.filter { 
                 it.y1 >= handY1 && it.y2 <= imgH * 1.05f
             }.sortedBy { it.centerX }
@@ -138,6 +185,7 @@ class MahjongOnnxDetector(context: Context) {
             
             RecognitionResult(handTiles, detections, allNames, avgConf)
         } catch (e: Exception) {
+            lastError = "识别异常: ${e.message}"
             null
         }
     }
@@ -149,19 +197,13 @@ class MahjongOnnxDetector(context: Context) {
         
         for (i in pixels.indices) {
             val pixel = pixels[i]
-            // CHW格式, RGB顺序
-            floatArray[i] = ((pixel shr 16) and 0xFF) / 255.0f  // R
-            floatArray[640 * 640 + i] = ((pixel shr 8) and 0xFF) / 255.0f  // G
-            floatArray[2 * 640 * 640 + i] = (pixel and 0xFF) / 255.0f  // B
+            floatArray[i] = ((pixel shr 16) and 0xFF) / 255.0f
+            floatArray[640 * 640 + i] = ((pixel shr 8) and 0xFF) / 255.0f
+            floatArray[2 * 640 * 640 + i] = (pixel and 0xFF) / 255.0f
         }
         return floatArray
     }
     
-    /**
-     * 自动检测ONNX输出格式并解析
-     * YOLO输出可能是 [1,39,8400] 或 [1,8400,39]
-     * 不依赖shape API，直接try-catch两种格式
-     */
     private fun postprocessAuto(
         outputValue: OnnxValue,
         origW: Int, origH: Int,
@@ -170,22 +212,18 @@ class MahjongOnnxDetector(context: Context) {
         val detections = mutableListOf<Detection>()
         val numClasses = 35
         
-        // 策略: 尝试两种格式，取检测结果更多的
         val d1 = mutableListOf<Detection>()
         val d2 = mutableListOf<Detection>()
         
-        // 尝试1: 3D格式 [1, 39, 8400] 或 [1, 8400, 39]
+        // 尝试1: 3D格式
         try {
             val data3d = (outputValue.value as? Array<Array<FloatArray>>)?.getOrNull(0)
             if (data3d != null && data3d.isNotEmpty()) {
                 if (data3d.size == 39) {
-                    // [39][8400] format
                     parseOutput39x8400(data3d, origW, origH, confThreshold, numClasses, d1)
                 } else if (data3d.size == 8400) {
-                    // [8400][39] format
                     parseOutput8400x39(data3d, origW, origH, confThreshold, numClasses, d1)
                 } else {
-                    // 未知，都试
                     try { parseOutput39x8400(data3d, origW, origH, confThreshold, numClasses, d1) } catch (_: Exception) {}
                     try { parseOutput8400x39(data3d, origW, origH, confThreshold, numClasses, d2) } catch (_: Exception) {}
                 }
@@ -206,13 +244,11 @@ class MahjongOnnxDetector(context: Context) {
             } catch (_: Exception) {}
         }
         
-        // 取结果更多的一组
         detections.addAll(if (d1.size >= d2.size) d1 else d2)
         
         return nms(detections, 0.45f)
     }
     
-    // [39][8400] format - data[feature][anchor]
     private fun parseOutput39x8400(
         data: Array<FloatArray>, 
         origW: Int, origH: Int, 
@@ -252,7 +288,6 @@ class MahjongOnnxDetector(context: Context) {
         }
     }
     
-    // [8400][39] format - data[anchor][feature]
     private fun parseOutput8400x39(
         data: Array<FloatArray>,
         origW: Int, origH: Int,
@@ -293,7 +328,6 @@ class MahjongOnnxDetector(context: Context) {
         }
     }
     
-    // 2D fallback: [39][8400]
     private fun parseOutput39x8400_2d(
         data: Array<FloatArray>,
         origW: Int, origH: Int,
@@ -335,7 +369,6 @@ class MahjongOnnxDetector(context: Context) {
         }
     }
     
-    // 2D fallback: [8400][39]
     private fun parseOutput8400x39_2d(
         data: Array<FloatArray>,
         origW: Int, origH: Int,

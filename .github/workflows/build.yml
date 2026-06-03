@@ -31,20 +31,20 @@ jobs:
         
     - name: Rename APK
       run: |
-        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v190.apk
+        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v200.apk
         
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
-        path: app/build/outputs/apk/debug/mjhelper_v190.apk
+        path: app/build/outputs/apk/debug/mjhelper_v200.apk
     
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v19.0
-        name: "V19.0 YOLO+策略引擎"
-        body: "V19.0: 🎉 YOLO识别+向听数策略引擎+横屏宽面板！1) 使用/api/recognize YOLO API自动识别 2) 内置向听数计算器推荐弃牌 3) 横屏面板从12%加宽到28%看得清策略 4) 修复ONNX输出解析兼容性"
-        files: app/build/outputs/apk/debug/mjhelper_v190.apk
+        tag_name: v20.0
+        name: "V20.0 可调窗口+模型加载修复"
+        body: "V20.0: 🔧 1) 左边缘拖拽调整面板宽度 2) ONNX模型先CPU再NNAPI分步加载 3) 模型加载失败显示具体错误 4) 一键重试加载模型 5) 自动重试5次"
+        files: app/build/outputs/apk/debug/mjhelper_v200.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

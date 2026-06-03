@@ -6,6 +6,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.PixelFormat
@@ -17,7 +18,6 @@ import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -32,14 +32,19 @@ class FloatingService : Service() {
         var isRunning = false
         private const val CHANNEL_ID = "mj_floating"
         private const val NOTIFICATION_ID = 2
+        private const val PREFS_NAME = "mj_floating_prefs"
+        private const val KEY_LANDSCAPE_WIDTH = "landscape_width"
+        private const val KEY_PORTRAIT_WIDTH = "portrait_width"
     }
 
     private var windowManager: WindowManager? = null
     private var floatingView: View? = null
     private var webView: WebView? = null
     private var tvStatus: TextView? = null
+    private var resizeHandle: View? = null
     private val handler = Handler(Looper.getMainLooper())
     private var isExpanded = true
+    private var prefs: SharedPreferences? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -54,6 +59,7 @@ class FloatingService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val notification = createNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
@@ -98,6 +104,22 @@ class FloatingService : Service() {
         return Pair(realW, realH)
     }
 
+    private fun getSavedLandscapeWidth(): Int {
+        return prefs?.getInt(KEY_LANDSCAPE_WIDTH, -1) ?: -1
+    }
+
+    private fun saveLandscapeWidth(width: Int) {
+        prefs?.edit()?.putInt(KEY_LANDSCAPE_WIDTH, width)?.apply()
+    }
+
+    private fun getSavedPortraitWidth(): Int {
+        return prefs?.getInt(KEY_PORTRAIT_WIDTH, -1) ?: -1
+    }
+
+    private fun savePortraitWidth(width: Int) {
+        prefs?.edit()?.putInt(KEY_PORTRAIT_WIDTH, width)?.apply()
+    }
+
     private fun resizeFloatingWindow() {
         try {
             val params = floatingView?.layoutParams as? WindowManager.LayoutParams ?: return
@@ -111,23 +133,29 @@ class FloatingService : Service() {
     private fun applyWindowSize(params: WindowManager.LayoutParams, screenWidth: Int, screenHeight: Int, isLandscape: Boolean) {
         if (isExpanded) {
             if (isLandscape) {
-                // 横屏: 右侧面板, 占屏幕28%宽度，全高
-                params.width = (screenWidth * 0.28).toInt().coerceIn(400, 700)
+                // 横屏: 右侧面板, 用户可拖拽调整宽度
+                val savedW = getSavedLandscapeWidth()
+                params.width = if (savedW > 0) savedW else (screenWidth * 0.25).toInt().coerceIn(350, 700)
                 params.height = screenHeight
                 params.gravity = Gravity.END or Gravity.TOP
                 params.x = 0
                 params.y = 0
+                // 显示resize手柄
+                resizeHandle?.visibility = View.VISIBLE
             } else {
                 // 竖屏: 顶部卡片
-                params.width = (screenWidth * 0.8).toInt()
+                val savedW = getSavedPortraitWidth()
+                params.width = if (savedW > 0) savedW else (screenWidth * 0.8).toInt()
                 params.height = (params.width * 1.0).toInt()
                 params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
                 params.x = 0
                 params.y = 40
+                resizeHandle?.visibility = View.GONE
             }
         } else {
             params.width = if (isLandscape) 140 else (screenWidth * 0.4).toInt()
             params.height = WindowManager.LayoutParams.WRAP_CONTENT
+            resizeHandle?.visibility = View.GONE
         }
     }
 
@@ -140,8 +168,22 @@ class FloatingService : Service() {
 
         // Container
         val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+            orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(0xEE0a0e1a.toInt())
+        }
+
+        // Resize handle (左侧拖拽条)
+        resizeHandle = View(this).apply {
+            setBackgroundColor(0x40FFFFFF.toInt()) // 半透明白色
+            setOnTouchListener(ResizeTouchListener())
+        }
+        val resizeParams = LinearLayout.LayoutParams(16, LinearLayout.LayoutParams.MATCH_PARENT)
+        container.addView(resizeHandle, resizeParams)
+
+        // Content container (vertical)
+        val contentContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
         }
 
         // Top drag bar
@@ -153,7 +195,7 @@ class FloatingService : Service() {
         }
 
         tvStatus = TextView(this).apply {
-            text = "🀄 v19.0 YOLO"
+            text = "🀄 v20.0 YOLO"
             setTextColor(0xFFe8edf5.toInt())
             textSize = 13f
             setPadding(8, 4, 8, 4)
@@ -169,7 +211,7 @@ class FloatingService : Service() {
 
         topBar.addView(tvStatus, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         topBar.addView(tvCollapse)
-        container.addView(topBar)
+        contentContainer.addView(topBar)
 
         // WebView
         val wv = WebView(this)
@@ -179,7 +221,14 @@ class FloatingService : Service() {
             0,
             1f
         )
-        container.addView(wv, wvParams)
+        contentContainer.addView(wv, wvParams)
+
+        val contentParams = LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            1f
+        )
+        container.addView(contentContainer, contentParams)
 
         wv.settings.apply {
             javaScriptEnabled = true
@@ -210,11 +259,6 @@ class FloatingService : Service() {
 
         floatingView = container
 
-        // Window params
-        var winW: Int
-        var winH: Int
-        var winGravity: Int
-
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -226,7 +270,7 @@ class FloatingService : Service() {
 
         applyWindowSize(params, screenWidth, screenHeight, isLandscape)
 
-        // Drag handling
+        // Top bar drag (move window)
         var initialX = 0
         var initialY = 0
         var initialTouchX = 0f
@@ -260,9 +304,49 @@ class FloatingService : Service() {
         windowManager?.addView(floatingView, params)
     }
 
+    /**
+     * 左侧拖拽条 — 拖拽改变面板宽度
+     */
+    private inner class ResizeTouchListener : View.OnTouchListener {
+        private var startWidth = 0
+        private var startTouchX = 0f
+
+        @SuppressLint("ClickableViewAccessibility")
+        override fun onTouch(v: View?, event: MotionEvent): Boolean {
+            val params = floatingView?.layoutParams as? WindowManager.LayoutParams ?: return false
+            val (screenWidth, screenHeight) = getScreenSize()
+            val isLandscape = screenWidth > screenHeight
+            if (!isLandscape) return false
+
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    startWidth = params.width
+                    startTouchX = event.rawX
+                    return true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = startTouchX - event.rawX // 向左拖=加宽
+                    val newWidth = (startWidth + dx.toInt()).coerceIn(280, screenWidth - 200)
+                    params.width = newWidth
+                    try {
+                        windowManager?.updateViewLayout(floatingView, params)
+                    } catch (_: Exception) {}
+                    return true
+                }
+                MotionEvent.ACTION_UP -> {
+                    // 保存用户偏好宽度
+                    saveLandscapeWidth(params.width)
+                    return true
+                }
+            }
+            return false
+        }
+    }
+
     private fun toggleExpand() {
         isExpanded = !isExpanded
         webView?.visibility = if (isExpanded) View.VISIBLE else View.GONE
+        resizeHandle?.visibility = if (isExpanded) View.VISIBLE else View.GONE
 
         val (screenWidth, screenHeight) = getScreenSize()
         val isLandscape = screenWidth > screenHeight
@@ -286,7 +370,7 @@ class FloatingService : Service() {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle("🀄 捉鸡麻将提示器")
-                .setContentText("悬浮窗运行中 - 切到微乐麻将使用")
+                .setContentText("悬浮窗运行中 - 左边缘拖拽调宽度")
                 .setSmallIcon(android.R.drawable.ic_menu_compass)
                 .setOngoing(true)
                 .build()

@@ -21,6 +21,8 @@ class HttpServerService : Service() {
     private var helperHtml: String? = null
     private var detector: MahjongOnnxDetector? = null
     private var modelLoaded = false
+    private var modelError = ""
+    private var modelBytes: ByteArray? = null
     private val CHANNEL_ID = "mj_http"
     private val NOTIFICATION_ID = 3
     private val handler = Handler(Looper.getMainLooper())
@@ -46,20 +48,28 @@ class HttpServerService : Service() {
         try {
             detector = MahjongOnnxDetector(this)
             val inputStream = assets.open("mahjong-yolon-best.onnx")
-            modelLoaded = detector?.loadModel(inputStream) ?: false
+            modelBytes = inputStream.readBytes()
             inputStream.close()
+            modelLoaded = detector?.loadModel(ByteArrayInputStream(modelBytes!!)) ?: false
+            modelError = if (modelLoaded) "" else (detector?.lastError ?: "未知错误")
+            
+            // CPU加载成功后，尝试NNAPI加速
+            if (modelLoaded && modelBytes != null) {
+                val nnapiOk = detector?.tryEnableNNAPI(modelBytes!!) ?: false
+                if (nnapiOk) {
+                    // NNAPI加速成功
+                }
+            }
         } catch (e: Exception) {
             modelLoaded = false
+            modelError = "初始化异常: ${e.message}"
         }
     }
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        // 在后台线程初始化模型
-        Thread {
-            initDetector()
-        }.start()
+        Thread { initDetector() }.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -82,6 +92,8 @@ class HttpServerService : Service() {
                 override fun serve(session: IHTTPSession): Response {
                     return when {
                         session.uri == "/" || session.uri == "/helper" || session.uri == "/index.html" -> {
+                            // 每次刷新helper.html（方便调试更新）
+                            helperHtml = null
                             val html = loadHelperHtml()
                             newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", html).apply {
                                 addHeader("Access-Control-Allow-Origin", "*")
@@ -107,7 +119,6 @@ class HttpServerService : Service() {
                             }
                         }
                         session.uri == "/api/recognize" -> {
-                            // YOLO识别接口 - 返回识别到的手牌
                             if (!modelLoaded) {
                                 initDetector()
                             }
@@ -119,7 +130,7 @@ class HttpServerService : Service() {
                                 }
                             } else if (!modelLoaded) {
                                 newFixedLengthResponse(Response.Status.OK, "application/json",
-                                    """{"error":"model not loaded","tiles":[],"names":[]}""").apply {
+                                    """{"error":"model not loaded: $modelError","tiles":[],"names":[]}""").apply {
                                     addHeader("Access-Control-Allow-Origin", "*")
                                 }
                             } else {
@@ -138,8 +149,9 @@ class HttpServerService : Service() {
                                             addHeader("Cache-Control", "no-cache, no-store")
                                         }
                                     } else {
+                                        val err = detector?.lastError ?: "recognition failed"
                                         newFixedLengthResponse(Response.Status.OK, "application/json",
-                                            """{"error":"recognition failed","tiles":[],"names":[]}""").apply {
+                                            """{"error":"$err","tiles":[],"names":[]}""").apply {
                                             addHeader("Access-Control-Allow-Origin", "*")
                                         }
                                     }
@@ -155,10 +167,25 @@ class HttpServerService : Service() {
                             val capture = ScreenCaptureService
                             val timeSinceLast = if (capture.lastCaptureTime > 0) 
                                 (System.currentTimeMillis() - capture.lastCaptureTime) / 1000 else -1
-                            val json = """{"running":${capture.isRunning},"hasScreenshot":${capture.latestScreenshot != null},"captureCount":${capture.captureCount},"timeSinceLast":${timeSinceLast},"error":"${capture.lastError}","modelLoaded":$modelLoaded}"""
+                            val nnapi = detector?.useNNAPI ?: false
+                            val json = """{"running":${capture.isRunning},"hasScreenshot":${capture.latestScreenshot != null},"captureCount":${capture.captureCount},"timeSinceLast":${timeSinceLast},"error":"${capture.lastError}","modelLoaded":$modelLoaded,"modelError":"$modelError","nnapi":$nnapi}"""
                             newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
                                 addHeader("Access-Control-Allow-Origin", "*")
                                 addHeader("Cache-Control", "no-cache, no-store")
+                            }
+                        }
+                        session.uri == "/api/reload" -> {
+                            // 重新加载模型
+                            Thread {
+                                try { detector?.close() } catch (_: Exception) {}
+                                detector = null
+                                modelLoaded = false
+                                modelError = "重新加载中..."
+                                initDetector()
+                            }.start()
+                            newFixedLengthResponse(Response.Status.OK, "application/json", 
+                                """{"reloading":true}""").apply {
+                                addHeader("Access-Control-Allow-Origin", "*")
                             }
                         }
                         else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "not found")
