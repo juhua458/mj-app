@@ -160,6 +160,7 @@ class MahjongOnnxDetector(context: Context) {
     /**
      * 自动检测ONNX输出格式并解析
      * YOLO输出可能是 [1,39,8400] 或 [1,8400,39]
+     * 不依赖shape API，直接try-catch两种格式
      */
     private fun postprocessAuto(
         outputValue: OnnxValue,
@@ -167,51 +168,46 @@ class MahjongOnnxDetector(context: Context) {
         confThreshold: Float
     ): List<Detection> {
         val detections = mutableListOf<Detection>()
+        val numClasses = 35
         
+        // 策略: 尝试两种格式，取检测结果更多的
+        val d1 = mutableListOf<Detection>()
+        val d2 = mutableListOf<Detection>()
+        
+        // 尝试1: 3D格式 [1, 39, 8400] 或 [1, 8400, 39]
         try {
-            // 尝试获取输出shape
-            val shape = outputValue.info.shape
-            val numClasses = 35
-            
-            if (shape.size == 3) {
-                val dim1 = shape[1].toInt()
-                val dim2 = shape[2].toInt()
-                
-                if (dim1 == 39 && dim2 == 8400) {
-                    // 格式: [1, 39, 8400] - 每行是一个特征(4bbox+35class), 每列是一个anchor
-                    val data = (outputValue.value as? Array<Array<FloatArray>>)?.getOrNull(0) ?: return emptyList()
-                    parseOutput39x8400(data, origW, origH, confThreshold, numClasses, detections)
-                } else if (dim1 == 8400 && dim2 == 39) {
-                    // 格式: [1, 8400, 39] - 每行是一个anchor, 每列是一个特征
-                    val data = (outputValue.value as? Array<Array<FloatArray>>)?.getOrNull(0) ?: return emptyList()
-                    parseOutput8400x39(data, origW, origH, confThreshold, numClasses, detections)
+            val data3d = (outputValue.value as? Array<Array<FloatArray>>)?.getOrNull(0)
+            if (data3d != null && data3d.isNotEmpty()) {
+                if (data3d.size == 39) {
+                    // [39][8400] format
+                    parseOutput39x8400(data3d, origW, origH, confThreshold, numClasses, d1)
+                } else if (data3d.size == 8400) {
+                    // [8400][39] format
+                    parseOutput8400x39(data3d, origW, origH, confThreshold, numClasses, d1)
                 } else {
-                    // Unknown format, try both and pick the one with more detections
-                    val data = (outputValue.value as? Array<Array<FloatArray>>)?.getOrNull(0) ?: return emptyList()
-                    val d1 = mutableListOf<Detection>()
-                    val d2 = mutableListOf<Detection>()
-                    if (data.isNotEmpty()) {
-                        try { parseOutput39x8400(data, origW, origH, confThreshold, numClasses, d1) } catch (_: Exception) {}
-                        try { parseOutput8400x39(data, origW, origH, confThreshold, numClasses, d2) } catch (_: Exception) {}
-                    }
-                    detections.addAll(if (d1.size >= d2.size) d1 else d2)
-                }
-            } else if (shape.size == 2) {
-                // 2D output
-                val data = (outputValue.value as? Array<FloatArray>) ?: return emptyList()
-                if (data.size == 39) {
-                    parseOutput39x8400_2d(data, origW, origH, confThreshold, numClasses, detections)
-                } else if (data.size == 8400) {
-                    parseOutput8400x39_2d(data, origW, origH, confThreshold, numClasses, detections)
+                    // 未知，都试
+                    try { parseOutput39x8400(data3d, origW, origH, confThreshold, numClasses, d1) } catch (_: Exception) {}
+                    try { parseOutput8400x39(data3d, origW, origH, confThreshold, numClasses, d2) } catch (_: Exception) {}
                 }
             }
-        } catch (e: Exception) {
-            // Fallback: try original parsing
+        } catch (_: Exception) {}
+        
+        // 尝试2: 2D格式
+        if (d1.isEmpty() && d2.isEmpty()) {
             try {
-                val data = (outputValue.value as? Array<FloatArray>) ?: return emptyList()
-                parseOutput39x8400_2d(data, origW, origH, confThreshold, numClasses, detections)
+                val data2d = outputValue.value as? Array<FloatArray>
+                if (data2d != null) {
+                    if (data2d.size == 39) {
+                        parseOutput39x8400_2d(data2d, origW, origH, confThreshold, numClasses, d1)
+                    } else if (data2d.size == 8400) {
+                        parseOutput8400x39_2d(data2d, origW, origH, confThreshold, numClasses, d1)
+                    }
+                }
             } catch (_: Exception) {}
         }
+        
+        // 取结果更多的一组
+        detections.addAll(if (d1.size >= d2.size) d1 else d2)
         
         return nms(detections, 0.45f)
     }
