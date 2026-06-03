@@ -31,20 +31,20 @@ jobs:
         
     - name: Rename APK
       run: |
-        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v210.apk
+        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v220.apk
         
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
-        path: app/build/outputs/apk/debug/mjhelper_v210.apk
+        path: app/build/outputs/apk/debug/mjhelper_v220.apk
     
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v21.0
-        name: "V21.0 Letterbox预处理+截屏裁剪+面板高度可调"
-        body: "V21.0: 🔧 1) Letterbox预处理(保持宽高比,与YOLO训练一致) 2) 截屏裁剪(去掉helper面板区域) 3) FloatBuffer解析ONNX输出 4) 置信度阈值0.15 5) 面板高度默认60%(底部留空给碰杠胡) 6) 底部拖拽条调高度 7) 调试信息增强"
-        files: app/build/outputs/apk/debug/mjhelper_v210.apk
+        tag_name: v22.0
+        name: "V22.0 修复YOLO识别0检测的致命BUG"
+        body: "V22.0: 🐛★关键修复★ ONNX模型输出bbox是归一化坐标(0-1),之前代码当成640像素空间坐标处理,导致所有检测被过滤为0! 修复:cx/cy/w/h先乘640转像素再反算原始坐标. Python实测验证:修复后0→206个检测,NMS后33个,手牌9张"
+        files: app/build/outputs/apk/debug/mjhelper_v220.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

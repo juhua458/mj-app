@@ -14,14 +14,15 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * ONNX Runtime 麻将牌识别引擎 v4
+ * ONNX Runtime 麻将牌识别引擎 v5
  * 
- * v4改进:
- * 1. Letterbox预处理(保持宽高比+灰色填充), 与YOLO训练一致
- * 2. FloatBuffer解析输出tensor, 不依赖类型转换
- * 3. 支持截图裁剪(去掉helper面板区域)
- * 4. 降低默认置信度阈值
- * 5. 暴露lastDebug调试信息
+ * v5修复:
+ * 1. ★ 关键BUG修复: ONNX输出bbox是归一化坐标(0-1), 需先乘640转像素空间再反算原始坐标
+ * 2. Letterbox预处理(保持宽高比+灰色填充), 与YOLO训练一致
+ * 3. FloatBuffer解析输出tensor, 不依赖类型转换
+ * 4. 支持截图裁剪(去掉helper面板区域)
+ * 5. 降低默认置信度阈值
+ * 6. 修复debug信息被覆盖的问题, 保留tensor_shape等关键调试信息
  */
 class MahjongOnnxDetector(context: Context) {
     
@@ -235,7 +236,8 @@ class MahjongOnnxDetector(context: Context) {
             // 5. 后处理(FloatBuffer方式, 可靠解析)
             val rawDetections = postprocessFloatBuffer(outputValue, origW, origH, scale, padX, padY, confThreshold)
             
-            lastDebug = "crop=${cropWidth}x${bitmap.height} letterbox_scale=${"%.3f".format(scale)} raw_dets=${rawDetections.size}"
+            // 保留postprocessFloatBuffer的debug信息(含tensor_shape), 追加而非覆盖
+            lastDebug = "$lastDebug | crop=${cropWidth}x${bitmap.height} scale=${"%.3f".format(scale)} raw_dets=${rawDetections.size}"
             
             // 6. NMS
             val detections = nms(rawDetections, 0.45f)
@@ -382,12 +384,13 @@ class MahjongOnnxDetector(context: Context) {
             val hIdx = 3 * numAnchors + a
             if (cxIdx >= data.size || cyIdx >= data.size || wIdx >= data.size || hIdx >= data.size) continue
             
-            val cx640 = data[cxIdx]
-            val cy640 = data[cyIdx]
-            val w640 = data[wIdx]
-            val h640 = data[hIdx]
+            // ★ v5修复: ONNX输出bbox是归一化坐标(0-1), 需先乘640转像素空间
+            val cx640 = data[cxIdx] * 640f  // 归一化→像素
+            val cy640 = data[cyIdx] * 640f
+            val w640 = data[wIdx] * 640f
+            val h640 = data[hIdx] * 640f
             
-            // 从letterbox空间转换到原始图片空间
+            // 从letterbox像素空间转换到原始图片空间
             val cxOrig = (cx640 - padX) / scale
             val cyOrig = (cy640 - padY) / scale
             val wOrig = w640 / scale
@@ -438,13 +441,13 @@ class MahjongOnnxDetector(context: Context) {
             }
             if (maxClassScore < confThreshold) continue
             
-            // bbox (在letterbox 640x640空间)
-            val cx640 = data[base + 0]
-            val cy640 = data[base + 1]
-            val w640 = data[base + 2]
-            val h640 = data[base + 3]
+            // ★ v5修复: ONNX输出bbox是归一化坐标(0-1), 需先乘640转像素空间
+            val cx640 = data[base + 0] * 640f  // 归一化→像素
+            val cy640 = data[base + 1] * 640f
+            val w640 = data[base + 2] * 640f
+            val h640 = data[base + 3] * 640f
             
-            // 从letterbox空间转换到原始图片空间
+            // 从letterbox像素空间转换到原始图片空间
             val cxOrig = (cx640 - padX) / scale
             val cyOrig = (cy640 - padY) / scale
             val wOrig = w640 / scale
