@@ -31,20 +31,20 @@ jobs:
         
     - name: Rename APK
       run: |
-        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v224.apk
+        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v225.apk
         
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
-        path: app/build/outputs/apk/debug/mjhelper_v224.apk
+        path: app/build/outputs/apk/debug/mjhelper_v225.apk
     
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v22.4
-        name: "V22.4 修复JSON构造BUG"
-        body: "V22.4: 修复HttpServerService中6处JSON构造BUG - 全部改用JSONObject/JSONArray替代手动字符串拼接。旧BUG: Kotlin List.toString()输出[2m,4m]无引号→非法JSON→前端解析崩溃。修复后: 所有JSON使用org.json库构造，自动转义特殊字符，彻底消灭手动拼接"
-        files: app/build/outputs/apk/debug/mjhelper_v224.apk
+        tag_name: v22.5
+        name: "V22.5 禁用NNAPI+修复版本号+增强debug"
+        body: "V22.5: ★禁用NNAPI(CPU推理更稳定,NNAPI可能导致检测数暴跌) ★修复FloatingService版本号v22.1→v22.5 ★移除HTML重复标题栏 ★修复旋转后cropRight计算 ★增加详细debug(conf_pass/coord_pass/size_pass/双格式对比) ★动态更新原生标题栏显示手牌数"
+        files: app/build/outputs/apk/debug/mjhelper_v225.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

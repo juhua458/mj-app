@@ -15,13 +15,19 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * ONNX Runtime 麻将牌识别引擎 v8
+ * ONNX Runtime 麻将牌识别引擎 v9
+ * 
+ * v9修复 (V22.5):
+ * 1. ★★★ 关键修复: 禁用NNAPI加速, 默认CPU推理
+ *    NNAPI在一加13T上可能产生数值精度异常, 导致检测数从143暴跌至8
+ *    CPU推理虽然稍慢但数值稳定可靠 (YOLOv8n推理<200ms)
+ * 2. ★ 增加详细debug输出: conf_pass/coord_pass/size_pass计数
+ *    用于精确定位检测数异常时卡在哪一步
+ * 3. ★ 双格式对比debug: 即使shape已知也同时跑两种格式, 输出d1/d2
+ * 4. 修复cropRight: 旋转后重新计算面板裁剪区域
  * 
  * v8修复:
  * 1. ★ 关键BUG修复: 竖屏截屏旋转方向错误 - postRotate(90f)顺时针→postRotate(-90f)逆时针
- *    V22.1/V22.2的BUG: 顺时针90°把竖屏中的手牌从底部翻到顶部(cy=73-86), 被handY过滤→0手牌
- *    修复后: 逆时针90°把手牌回到底部(cy≈580-830), 在handY范围内→手牌正确识别
- *    根因: 一加13T MediaProjection竖屏截屏, 游戏画面逆时针90°进入竖屏, 需逆时针90°恢复
  * 
  * v7修复:
  * 1. ★ 关键BUG修复: ONNX输出格式选择逻辑 - 用tensor shape确定格式, 不再"盲猜选多"
@@ -136,22 +142,21 @@ class MahjongOnnxDetector(context: Context) {
     }
     
     /**
-     * 尝试切换到NNAPI加速（在CPU加载成功后调用）
+     * ★ V22.5: 禁用NNAPI加速
+     * NNAPI在一加13T上可能产生数值精度异常，导致检测数从143暴跌至8
+     * CPU推理虽然稍慢但数值稳定可靠 (YOLOv8n推理<200ms)
+     * 保留接口但默认不切换，后续验证NNAPI可用后再开放
      */
     fun tryEnableNNAPI(modelBytes: ByteArray): Boolean {
-        try {
-            val nnapiOptions = OrtSession.SessionOptions()
-            nnapiOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-            nnapiOptions.addNnapi()
-            val nnapiSession = env?.createSession(modelBytes, nnapiOptions)
-            session?.close()
-            session = nnapiSession
-            useNNAPI = true
-            nnapiOptions.close()
-            return true
-        } catch (e: Exception) {
-            return false
-        }
+        lastDebug += " | NNAPI_SKIPPED(CPU_safe)"
+        return false  // ★ 强制不启用NNAPI
+        // 原NNAPI代码保留但禁用，验证安全后可恢复:
+        // try { val nnapiOptions = OrtSession.SessionOptions()
+        //   nnapiOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+        //   nnapiOptions.addNnapi()
+        //   val nnapiSession = env?.createSession(modelBytes, nnapiOptions)
+        //   session?.close(); session = nnapiSession; useNNAPI = true; nnapiOptions.close()
+        //   return true } catch (e: Exception) { return false }
     }
     
     data class Detection(
@@ -223,13 +228,23 @@ class MahjongOnnxDetector(context: Context) {
             }
             
             // 1. 裁剪掉右侧helper面板区域
-            // 旋转后如果面板在右侧, cropRight需要按比例调整(3/4分辨率)
-            val effectiveCropRight = if (wasRotated) {
+            // ★ V22.5修复: cropRight的来源是HttpServerService, 它基于原始bitmap(竖屏)判断isLandscape
+            // 如果原始bitmap是竖屏, cropRight=0(即使面板确实在屏幕上)
+            // 但旋转后图片变横屏, 面板在右侧应该被裁掉
+            // 修复: 旋转后如果面板宽度>0且图片是横屏, 重新计算cropRight
+            val effectiveCropRight = if (wasRotated && cropRight > 0) {
                 // 旋转后图片是3/4分辨率, 面板宽度也要按比例缩放
-                // 但如果cropRight=0(竖屏时不裁剪), 保持0
-                if (cropRight > 0) {
-                    val scale = workingBitmap.width.toFloat() / bitmap.height.toFloat()
-                    (cropRight * scale).toInt()
+                val scale = workingBitmap.width.toFloat() / bitmap.height.toFloat()
+                (cropRight * scale).toInt()
+            } else if (wasRotated && cropRight == 0) {
+                // ★ V22.5修复: 旋转后横屏但cropRight=0, 说明HttpServerService没检测到面板
+                // 可能原因: 原始bitmap竖屏, isLandscape=false → cropRight=0
+                // 此时用FloatingService.currentPanelWidth重新计算
+                val panelW = com.mjhelper.screenshot.FloatingService.currentPanelWidth
+                if (panelW > 0 && workingBitmap.width > workingBitmap.height) {
+                    // 面板在旋转后图片的右侧, 按比例缩放到3/4分辨率
+                    val scaleFactor = workingBitmap.width.toFloat() / bitmap.height.toFloat()
+                    (panelW * scaleFactor).toInt()
                 } else 0
             } else cropRight
             
@@ -274,7 +289,7 @@ class MahjongOnnxDetector(context: Context) {
             
             // 保留postprocessFloatBuffer的debug信息(含tensor_shape), 追加而非覆盖
             val rotInfo = if (wasRotated) "ROTATED(${bitmap.width}x${bitmap.height}→${workingBitmap.width}x${workingBitmap.height})" else ""
-            lastDebug = "$lastDebug | $rotInfo crop=${cropWidth}x${workingBitmap.height} scale=${"%.3f".format(scale)} raw_dets=${rawDetections.size}"
+            lastDebug = "$lastDebug | $rotInfo crop=${cropWidth}x${workingBitmap.height} cropR=$effectiveCropRight scale=${"%.3f".format(scale)} raw_dets=${rawDetections.size}"
             
             // 6. NMS
             val detections = nms(rawDetections, 0.45f)
@@ -318,6 +333,7 @@ class MahjongOnnxDetector(context: Context) {
      * 使用FloatBuffer解析ONNX输出, 不依赖类型转换
      * 支持 [1, 39, 8400] 和 [1, 8400, 39] 两种格式
      * ★ v7关键修复: 用tensor shape确定正确格式, 不再"盲猜选多"(V22.1教训)
+     * ★ v9增加: 详细debug(conf_pass/coord_pass/size_pass) + 双格式对比
      */
     private fun postprocessFloatBuffer(
         outputValue: OnnxValue,
@@ -364,57 +380,59 @@ class MahjongOnnxDetector(context: Context) {
             lastDebug += " unexpected_size! expected=$expectedSize"
         }
         
-        // ★ v7关键修复: 用shape确定正确格式, 不再"两种都试选多的"
-        // 旧逻辑: parseFlat39x8400和parseFlat8400x39都跑一遍, 选检测数更多的
-        // 旧BUG: [39,8400]格式数据被[8400,39]错读→更多假阳性→被选中→垃圾bbox→0手牌
+        // ★ V22.5: 输出前5个raw值, 用于判断坐标空间
+        val rawSample = (0 until minOf(5, data.size)).map { "%.4f".format(data[it]) }.joinToString(",")
+        lastDebug += " raw=[${rawSample}]"
+        
         val numAnchors = 8400
         
+        // ★ V22.5: 同时运行两种格式进行对比debug
         val d1 = mutableListOf<Detection>()
         val d2 = mutableListOf<Detection>()
         
+        // 格式1: [1, 39, 8400] 解析
+        var fmt1Debug = ""
+        try {
+            val counters1 = intArrayOf(0, 0, 0)  // conf_pass, coord_pass, size_pass
+            parseFlat39x8400(data, numAnchors, origW, origH, scale, padX, padY, confThreshold, numClasses, d1, counters1)
+            fmt1Debug = "fmt1:conf=${counters1[0]}/coord=${counters1[1]}/size=${counters1[2]}/det=${d1.size}"
+        } catch (e: Exception) {
+            fmt1Debug = "fmt1_err:${e.message}"
+        }
+        
+        // 格式2: [1, 8400, 39] 解析
+        var fmt2Debug = ""
+        try {
+            val counters2 = intArrayOf(0, 0, 0)
+            parseFlat8400x39(data, 39, origW, origH, scale, padX, padY, confThreshold, numClasses, d2, counters2)
+            fmt2Debug = "fmt2:conf=${counters2[0]}/coord=${counters2[1]}/size=${counters2[2]}/det=${d2.size}"
+        } catch (e: Exception) {
+            fmt2Debug = "fmt2_err:${e.message}"
+        }
+        
+        lastDebug += " | $fmt1Debug | $fmt2Debug"
+        
+        // ★ v7: 用shape确定正确格式选择
         when {
-            // shape=[1, 39, 8400] → 第2维是39(4bbox+35class), 用格式1
+            // shape=[1, 39, 8400] → 用格式1
             shape.size >= 3 && shape[1] == 39 && shape[2] == numAnchors -> {
-                try {
-                    parseFlat39x8400(data, numAnchors, origW, origH, scale, padX, padY, confThreshold, numClasses, d1)
-                } catch (e: Exception) {
-                    lastDebug += " fmt1_err:${e.message}"
-                }
-                lastDebug += " fmt=1[39,8400] d1=${d1.size}"
+                lastDebug += " | SELECT=fmt1[39,8400]"
                 detections.addAll(d1)
             }
-            // shape=[1, 8400, 39] → 第2维是8400(anchors), 用格式2
+            // shape=[1, 8400, 39] → 用格式2
             shape.size >= 3 && shape[1] == numAnchors && shape[2] == 39 -> {
-                try {
-                    parseFlat8400x39(data, 39, origW, origH, scale, padX, padY, confThreshold, numClasses, d2)
-                } catch (e: Exception) {
-                    lastDebug += " fmt2_err:${e.message}"
-                }
-                lastDebug += " fmt=2[8400,39] d2=${d2.size}"
+                lastDebug += " | SELECT=fmt2[8400,39]"
                 detections.addAll(d2)
             }
-            // shape未知→两种都试, 选检测数更合理的(而非更多的)
+            // shape未知→选更合理的
             else -> {
-                try {
-                    parseFlat39x8400(data, numAnchors, origW, origH, scale, padX, padY, confThreshold, numClasses, d1)
-                } catch (e: Exception) {
-                    lastDebug += " fmt1_err:${e.message}"
-                }
-                try {
-                    parseFlat8400x39(data, 39, origW, origH, scale, padX, padY, confThreshold, numClasses, d2)
-                } catch (e: Exception) {
-                    lastDebug += " fmt2_err:${e.message}"
-                }
-                lastDebug += " fmt=unknown fmt1=${d1.size} fmt2=${d2.size}"
-                // ★ 不选"更多的", 选"更合理的" - 正常检测应在50-300范围
-                // 错误格式会产生异常多假阳性(>300)或异常少(<5)
                 val d1Reasonable = d1.size in 5..300
                 val d2Reasonable = d2.size in 5..300
                 detections.addAll(when {
-                    d1Reasonable && !d2Reasonable -> d1
-                    d2Reasonable && !d1Reasonable -> d2
-                    d1Reasonable && d2Reasonable -> if (d1.size <= d2.size) d1 else d2  // 都合理选少的(少=更精确)
-                    else -> d1  // 都不合理, 默认格式1
+                    d1Reasonable && !d2Reasonable -> { lastDebug += " | SELECT=fmt1(reasonable)"; d1 }
+                    d2Reasonable && !d1Reasonable -> { lastDebug += " | SELECT=fmt2(reasonable)"; d2 }
+                    d1Reasonable && d2Reasonable -> { lastDebug += " | SELECT=fmt1(both_ok)"; d1 }
+                    else -> { lastDebug += " | SELECT=fmt1(fallback)"; d1 }
                 })
             }
         }
@@ -425,13 +443,15 @@ class MahjongOnnxDetector(context: Context) {
     /**
      * 解析 [39, 8400] 格式
      * data[c * numAnchors + a]: 第c个通道的第a个anchor
+     * ★ V22.5: 增加counters参数用于debug计数
      */
     private fun parseFlat39x8400(
         data: FloatArray, numAnchors: Int,
         origW: Float, origH: Float,
         scale: Float, padX: Float, padY: Float,
         confThreshold: Float, numClasses: Int,
-        detections: MutableList<Detection>
+        detections: MutableList<Detection>,
+        counters: IntArray = intArrayOf(0, 0, 0)  // [conf_pass, coord_pass, size_pass]
     ) {
         for (a in 0 until numAnchors) {
             // 找最大类别分数
@@ -447,6 +467,7 @@ class MahjongOnnxDetector(context: Context) {
                 }
             }
             if (maxClassScore < confThreshold) continue
+            counters[0]++  // conf_pass
             
             // bbox (在letterbox 640x640空间)
             val cxIdx = 0 * numAnchors + a
@@ -469,7 +490,9 @@ class MahjongOnnxDetector(context: Context) {
             
             // 过滤无效检测(超出图片范围)
             if (cxOrig < 0 || cyOrig < 0 || cxOrig > origW || cyOrig > origH) continue
+            counters[1]++  // coord_pass
             if (wOrig <= 0 || hOrig <= 0 || wOrig > origW || hOrig > origH) continue
+            counters[2]++  // size_pass
             
             detections.add(Detection(
                 classId = maxClassId,
@@ -487,13 +510,15 @@ class MahjongOnnxDetector(context: Context) {
     /**
      * 解析 [8400, 39] 格式
      * data[a * 39 + v]: 第a个anchor的第v个值
+     * ★ V22.5: 增加counters参数用于debug计数
      */
     private fun parseFlat8400x39(
         data: FloatArray, numValues: Int,
         origW: Float, origH: Float,
         scale: Float, padX: Float, padY: Float,
         confThreshold: Float, numClasses: Int,
-        detections: MutableList<Detection>
+        detections: MutableList<Detection>,
+        counters: IntArray = intArrayOf(0, 0, 0)  // [conf_pass, coord_pass, size_pass]
     ) {
         val numAnchors = data.size / numValues
         for (a in 0 until numAnchors) {
@@ -511,6 +536,7 @@ class MahjongOnnxDetector(context: Context) {
                 }
             }
             if (maxClassScore < confThreshold) continue
+            counters[0]++  // conf_pass
             
             // ★ v5修复: ONNX输出bbox是归一化坐标(0-1), 需先乘640转像素空间
             val cx640 = data[base + 0] * 640f  // 归一化→像素
@@ -526,7 +552,9 @@ class MahjongOnnxDetector(context: Context) {
             
             // 过滤无效检测
             if (cxOrig < 0 || cyOrig < 0 || cxOrig > origW || cyOrig > origH) continue
+            counters[1]++  // coord_pass
             if (wOrig <= 0 || hOrig <= 0 || wOrig > origW || hOrig > origH) continue
+            counters[2]++  // size_pass
             
             detections.add(Detection(
                 classId = maxClassId,
