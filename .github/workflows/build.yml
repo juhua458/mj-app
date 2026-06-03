@@ -31,20 +31,20 @@ jobs:
         
     - name: Rename APK
       run: |
-        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v200.apk
+        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v210.apk
         
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
-        path: app/build/outputs/apk/debug/mjhelper_v200.apk
+        path: app/build/outputs/apk/debug/mjhelper_v210.apk
     
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v20.0
-        name: "V20.0 可调窗口+模型加载修复"
-        body: "V20.0: 🔧 1) 左边缘拖拽调整面板宽度 2) ONNX模型先CPU再NNAPI分步加载 3) 模型加载失败显示具体错误 4) 一键重试加载模型 5) 自动重试5次"
-        files: app/build/outputs/apk/debug/mjhelper_v200.apk
+        tag_name: v21.0
+        name: "V21.0 Letterbox预处理+截屏裁剪+面板高度可调"
+        body: "V21.0: 🔧 1) Letterbox预处理(保持宽高比,与YOLO训练一致) 2) 截屏裁剪(去掉helper面板区域) 3) FloatBuffer解析ONNX输出 4) 置信度阈值0.15 5) 面板高度默认60%(底部留空给碰杠胡) 6) 底部拖拽条调高度 7) 调试信息增强"
+        files: app/build/outputs/apk/debug/mjhelper_v210.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
