@@ -15,7 +15,13 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * ONNX Runtime 麻将牌识别引擎 v7
+ * ONNX Runtime 麻将牌识别引擎 v8
+ * 
+ * v8修复:
+ * 1. ★ 关键BUG修复: 竖屏截屏旋转方向错误 - postRotate(90f)顺时针→postRotate(-90f)逆时针
+ *    V22.1/V22.2的BUG: 顺时针90°把竖屏中的手牌从底部翻到顶部(cy=73-86), 被handY过滤→0手牌
+ *    修复后: 逆时针90°把手牌回到底部(cy≈580-830), 在handY范围内→手牌正确识别
+ *    根因: 一加13T MediaProjection竖屏截屏, 游戏画面逆时针90°进入竖屏, 需逆时针90°恢复
  * 
  * v7修复:
  * 1. ★ 关键BUG修复: ONNX输出格式选择逻辑 - 用tensor shape确定格式, 不再"盲猜选多"
@@ -209,7 +215,7 @@ class MahjongOnnxDetector(context: Context) {
             var wasRotated = false
             if (bitmap.width < bitmap.height) {
                 val matrix = Matrix()
-                matrix.postRotate(90f)
+                matrix.postRotate(-90f)
                 workingBitmap = Bitmap.createBitmap(
                     bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
                 )

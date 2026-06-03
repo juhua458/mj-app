@@ -31,20 +31,20 @@ jobs:
         
     - name: Rename APK
       run: |
-        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v222.apk
+        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/mjhelper_v223.apk
         
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
-        path: app/build/outputs/apk/debug/mjhelper_v222.apk
+        path: app/build/outputs/apk/debug/mjhelper_v223.apk
     
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v22.2
-        name: "V22.2 修复ONNX输出格式选择BUG"
-        body: "V22.2: 修复ONNX输出格式选择BUG - 用tensor shape确定格式不再盲猜选多。旧BUG: [39,8400]数据被[8400,39]错读→更多假阳性被选中→垃圾bbox→0手牌"
-        files: app/build/outputs/apk/debug/mjhelper_v222.apk
+        tag_name: v22.3
+        name: "V22.3 修复竖屏截屏旋转方向BUG"
+        body: "V22.3: 修复竖屏截屏旋转方向 - postRotate(90f)顺时针→postRotate(-90f)逆时针。旧BUG: 顺时针90°把手牌从底部翻到顶部(cy=73-86)，被handY过滤→0手牌。修复后: 逆时针90°把手牌回到底部(cy≈580-830)，手牌正确识别"
+        files: app/build/outputs/apk/debug/mjhelper_v223.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
