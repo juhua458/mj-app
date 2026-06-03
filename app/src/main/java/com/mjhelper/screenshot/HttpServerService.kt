@@ -5,8 +5,12 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import fi.iki.elonen.NanoHTTPD
 import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
@@ -15,8 +19,11 @@ class HttpServerService : Service() {
 
     private var server: NanoHTTPD? = null
     private var helperHtml: String? = null
+    private var detector: MahjongOnnxDetector? = null
+    private var modelLoaded = false
     private val CHANNEL_ID = "mj_http"
     private val NOTIFICATION_ID = 3
+    private val handler = Handler(Looper.getMainLooper())
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -34,9 +41,25 @@ class HttpServerService : Service() {
         return helperHtml ?: ""
     }
 
+    private fun initDetector() {
+        if (detector != null && modelLoaded) return
+        try {
+            detector = MahjongOnnxDetector(this)
+            val inputStream = assets.open("mahjong-yolon-best.onnx")
+            modelLoaded = detector?.loadModel(inputStream) ?: false
+            inputStream.close()
+        } catch (e: Exception) {
+            modelLoaded = false
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        // 在后台线程初始化模型
+        Thread {
+            initDetector()
+        }.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -47,7 +70,6 @@ class HttpServerService : Service() {
             return START_NOT_STICKY
         }
 
-        // Must be foreground service to survive in background on Android 12+
         val notification = createNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
@@ -84,11 +106,56 @@ class HttpServerService : Service() {
                                 }
                             }
                         }
+                        session.uri == "/api/recognize" -> {
+                            // YOLO识别接口 - 返回识别到的手牌
+                            if (!modelLoaded) {
+                                initDetector()
+                            }
+                            val data = ScreenCaptureService.latestScreenshot
+                            if (data == null) {
+                                newFixedLengthResponse(Response.Status.OK, "application/json", 
+                                    """{"error":"no screenshot","tiles":[],"names":[]}""").apply {
+                                    addHeader("Access-Control-Allow-Origin", "*")
+                                }
+                            } else if (!modelLoaded) {
+                                newFixedLengthResponse(Response.Status.OK, "application/json",
+                                    """{"error":"model not loaded","tiles":[],"names":[]}""").apply {
+                                    addHeader("Access-Control-Allow-Origin", "*")
+                                }
+                            } else {
+                                try {
+                                    val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
+                                    val result = detector?.recognize(bitmap)
+                                    bitmap.recycle()
+                                    
+                                    if (result != null) {
+                                        val tilesJson = result.handTiles.joinToString(",") { tile ->
+                                            """{"name":"${tile.className}","short":"${tile.shortName}","conf":${"%.2f".format(tile.confidence)},"x":${tile.centerX.toInt()}}"""
+                                        }
+                                        val json = """{"tiles":[$tilesJson],"names":${result.handTileNames},"avgConf":${"%.2f".format(result.confidence)},"total":${result.allDetections.size}}"""
+                                        newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
+                                            addHeader("Access-Control-Allow-Origin", "*")
+                                            addHeader("Cache-Control", "no-cache, no-store")
+                                        }
+                                    } else {
+                                        newFixedLengthResponse(Response.Status.OK, "application/json",
+                                            """{"error":"recognition failed","tiles":[],"names":[]}""").apply {
+                                            addHeader("Access-Control-Allow-Origin", "*")
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    newFixedLengthResponse(Response.Status.OK, "application/json",
+                                        """{"error":"${e.message}","tiles":[],"names":[]}""").apply {
+                                        addHeader("Access-Control-Allow-Origin", "*")
+                                    }
+                                }
+                            }
+                        }
                         session.uri == "/api/status" -> {
                             val capture = ScreenCaptureService
                             val timeSinceLast = if (capture.lastCaptureTime > 0) 
                                 (System.currentTimeMillis() - capture.lastCaptureTime) / 1000 else -1
-                            val json = """{"running":${capture.isRunning},"hasScreenshot":${capture.latestScreenshot != null},"captureCount":${capture.captureCount},"timeSinceLast":${timeSinceLast},"error":"${capture.lastError}"}"""
+                            val json = """{"running":${capture.isRunning},"hasScreenshot":${capture.latestScreenshot != null},"captureCount":${capture.captureCount},"timeSinceLast":${timeSinceLast},"error":"${capture.lastError}","modelLoaded":$modelLoaded}"""
                             newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
                                 addHeader("Access-Control-Allow-Origin", "*")
                                 addHeader("Cache-Control", "no-cache, no-store")
@@ -110,6 +177,9 @@ class HttpServerService : Service() {
     override fun onDestroy() {
         server?.stop()
         server = null
+        detector?.close()
+        detector = null
+        modelLoaded = false
         super.onDestroy()
     }
 
