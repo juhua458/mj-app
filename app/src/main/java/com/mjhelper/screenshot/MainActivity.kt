@@ -4,7 +4,10 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.widget.Button
 import android.widget.Switch
@@ -16,6 +19,7 @@ import androidx.appcompat.app.AppCompatActivity
 class MainActivity : AppCompatActivity() {
 
     private val TAG = "MJMainActivity"
+    private val OVERLAY_REQUEST_CODE = 1001
 
     private lateinit var tvStatus: TextView
     private lateinit var tvHint: TextView
@@ -42,13 +46,9 @@ class MainActivity : AppCompatActivity() {
                 updateUI()
                 Toast.makeText(this, "🀄 截屏已启动！", Toast.LENGTH_SHORT).show()
 
-                // Auto-open helper after short delay
+                // Auto-launch floating helper
                 btnHelper.postDelayed({
-                    try {
-                        startActivity(Intent(this, HelperActivity::class.java))
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to open helper", e)
-                    }
+                    tryLaunchFloatingHelper()
                 }, 800)
             } else {
                 Toast.makeText(this, "需要授权才能截屏", Toast.LENGTH_SHORT).show()
@@ -83,10 +83,10 @@ class MainActivity : AppCompatActivity() {
 
             btnHelper.setOnClickListener {
                 try {
-                    startActivity(Intent(this, HelperActivity::class.java))
+                    tryLaunchFloatingHelper()
                 } catch (e: Exception) {
                     Log.e(TAG, "Helper error", e)
-                    Toast.makeText(this, "打开提示器失败: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "启动悬浮窗失败: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
 
@@ -98,6 +98,52 @@ class MainActivity : AppCompatActivity() {
                 .getBoolean("auto_start", false)
         } catch (e: Exception) {
             Log.e(TAG, "onCreate error", e)
+        }
+    }
+
+    private fun tryLaunchFloatingHelper() {
+        if (!isRunning) {
+            Toast.makeText(this, "请先启动截屏", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "需要授权「显示在其他应用上层」", Toast.LENGTH_LONG).show()
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            startActivityForResult(intent, OVERLAY_REQUEST_CODE)
+        } else {
+            launchFloatingHelper()
+        }
+    }
+
+    private fun launchFloatingHelper() {
+        try {
+            val intent = Intent(this, FloatingService::class.java)
+            startService(intent)
+            Toast.makeText(this, "🀄 悬浮提示器已启动！切到微乐麻将", Toast.LENGTH_LONG).show()
+
+            // Go home so user can see the game
+            val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(homeIntent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Launch floating error", e)
+            Toast.makeText(this, "悬浮窗启动失败: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == OVERLAY_REQUEST_CODE) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
+                launchFloatingHelper()
+            } else {
+                Toast.makeText(this, "未获得悬浮窗权限，无法使用", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -115,6 +161,7 @@ class MainActivity : AppCompatActivity() {
         try {
             startService(Intent(this, ScreenCaptureService::class.java).apply { action = "STOP" })
             startService(Intent(this, HttpServerService::class.java).apply { action = "STOP" })
+            startService(Intent(this, FloatingService::class.java).apply { action = "STOP" })
             isRunning = false
             updateUI()
         } catch (e: Exception) {
@@ -129,7 +176,8 @@ class MainActivity : AppCompatActivity() {
                 tvStatus.setTextColor(getColor(android.R.color.holo_green_dark))
                 btnStart.text = "⏹ 停止截屏"
                 btnHelper.visibility = android.view.View.VISIBLE
-                tvHint.text = "👇 点「打开提示器」开始使用"
+                btnHelper.text = "🀄 打开悬浮提示器"
+                tvHint.text = "👇 点「打开悬浮提示器」→ 切到微乐麻将"
                 tvHint.setTextColor(getColor(android.R.color.holo_orange_dark))
             } else {
                 tvStatus.text = "⏸ 未启动"

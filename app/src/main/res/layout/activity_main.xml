@@ -26,7 +26,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="内置捉鸡麻将提示器v10"
+        android:text="捉鸡麻将提示器 v17 悬浮窗版"
         android:textSize="13sp"
         android:textColor="#94a3b8"
         android:layout_marginTop="6dp" />
@@ -54,8 +54,8 @@
         android:id="@+id/btnHelper"
         android:layout_width="240dp"
         android:layout_height="64dp"
-        android:text="🀄 打开提示器"
-        android:textSize="20sp"
+        android:text="🀄 打开悬浮提示器"
+        android:textSize="18sp"
         android:textColor="#ffffff"
         android:backgroundTint="#8b5cf6"
         android:layout_marginTop="16dp"
@@ -86,30 +86,19 @@
     </LinearLayout>
 
     <TextView
-        android:id="@+id/tvAddress"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="http://127.0.0.1:8666"
-        android:textSize="14sp"
-        android:textColor="#06b6d4"
-        android:layout_marginTop="30dp"
-        android:fontFamily="monospace" />
-
-    <TextView
         android:id="@+id/tvHint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="先点上方按钮启动截屏"
         android:textSize="13sp"
         android:textColor="#666666"
-        android:layout_marginTop="8dp"
-        android:lineSpacingExtra="3dp"
+        android:layout_marginTop="30dp"
         android:gravity="center" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="使用步骤：\n1. 点「开始截屏」→ 允许录屏权限\n2. 点「打开提示器」→ 自动识别\n3. 切到微乐麻将正常玩\n4. 提示器全自动运行，全程零操作"
+        android:text="使用步骤：\n1. 点「开始截屏」→ 允许录屏权限\n2. 点「打开悬浮提示器」→ 允许悬浮窗\n3. 自动回到桌面 → 打开微乐麻将\n4. 悬浮窗浮在游戏上方，全自动运行\n5. 拖动顶部栏可移动位置，点▼可收起"
         android:textSize="13sp"
         android:textColor="#64748b"
         android:layout_marginTop="20dp"
