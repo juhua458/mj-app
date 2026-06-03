@@ -12,6 +12,8 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import fi.iki.elonen.NanoHTTPD
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
 
@@ -118,13 +120,23 @@ class HttpServerService : Service() {
             if (!modelLoaded) { initDetector() }
             val data = ScreenCaptureService.latestScreenshot
             if (data == null) {
-                newFixedLengthResponse(Response.Status.OK, "application/json", 
-                    """{"error":"no screenshot","tiles":[],"names":[],"debug":"no_screenshot"}""").apply {
+                val json = JSONObject().apply {
+                    put("error", "no screenshot")
+                    put("tiles", JSONArray())
+                    put("names", JSONArray())
+                    put("debug", "no_screenshot")
+                }.toString()
+                newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
                     addHeader("Access-Control-Allow-Origin", "*")
                 }
             } else if (!modelLoaded) {
-                newFixedLengthResponse(Response.Status.OK, "application/json",
-                    """{"error":"model not loaded: $modelError","tiles":[],"names":[],"debug":"model_not_loaded"}""").apply {
+                val json = JSONObject().apply {
+                    put("error", "model not loaded: $modelError")
+                    put("tiles", JSONArray())
+                    put("names", JSONArray())
+                    put("debug", "model_not_loaded")
+                }.toString()
+                newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
                     addHeader("Access-Control-Allow-Origin", "*")
                 }
             } else {
@@ -143,10 +155,25 @@ class HttpServerService : Service() {
                     bitmap.recycle()
                     
                     if (result != null) {
-                        val tilesJson = result.handTiles.joinToString(",") { tile ->
-                            """{"name":"${tile.className}","short":"${tile.shortName}","conf":${"%.2f".format(tile.confidence)},"x":${tile.centerX.toInt()}}"""
+                        val tilesArray = JSONArray()
+                        for (tile in result.handTiles) {
+                            tilesArray.put(JSONObject().apply {
+                                put("name", tile.className)
+                                put("short", tile.shortName)
+                                put("conf", tile.confidence)
+                                put("x", tile.centerX.toInt())
+                            })
                         }
-                        val json = """{"tiles":[$tilesJson],"names":${result.handTileNames},"avgConf":${"%.2f".format(result.confidence)},"total":${result.allDetections.size},"debug":"${result.debugInfo}","imgSize":"${imgW}x${imgH}","cropRight":$cropRight}"""
+                        val namesArray = JSONArray(result.handTileNames)
+                        val json = JSONObject().apply {
+                            put("tiles", tilesArray)
+                            put("names", namesArray)
+                            put("avgConf", result.confidence)
+                            put("total", result.allDetections.size)
+                            put("debug", result.debugInfo)
+                            put("imgSize", "${imgW}x${imgH}")
+                            put("cropRight", cropRight)
+                        }.toString()
                         newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
                             addHeader("Access-Control-Allow-Origin", "*")
                             addHeader("Cache-Control", "no-cache, no-store")
@@ -154,14 +181,24 @@ class HttpServerService : Service() {
                     } else {
                         val err = detector?.lastError ?: "recognition failed"
                         val dbg = detector?.lastDebug ?: ""
-                        newFixedLengthResponse(Response.Status.OK, "application/json",
-                            """{"error":"$err","tiles":[],"names":[],"debug":"$dbg"}""").apply {
+                        val json = JSONObject().apply {
+                            put("error", err)
+                            put("tiles", JSONArray())
+                            put("names", JSONArray())
+                            put("debug", dbg)
+                        }.toString()
+                        newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
                             addHeader("Access-Control-Allow-Origin", "*")
                         }
                     }
                 } catch (e: Exception) {
-                    newFixedLengthResponse(Response.Status.OK, "application/json",
-                        """{"error":"${e.message}","tiles":[],"names":[],"debug":"exception"}""").apply {
+                    val json = JSONObject().apply {
+                        put("error", e.message ?: "unknown error")
+                        put("tiles", JSONArray())
+                        put("names", JSONArray())
+                        put("debug", "exception")
+                    }.toString()
+                    newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
                         addHeader("Access-Control-Allow-Origin", "*")
                     }
                 }
@@ -174,7 +211,18 @@ class HttpServerService : Service() {
                             val nnapi = detector?.useNNAPI ?: false
                             val dbg = detector?.lastDebug ?: ""
                             val panelW = FloatingService.currentPanelWidth
-                            val json = """{"running":${capture.isRunning},"hasScreenshot":${capture.latestScreenshot != null},"captureCount":${capture.captureCount},"timeSinceLast":${timeSinceLast},"error":"${capture.lastError}","modelLoaded":$modelLoaded,"modelError":"$modelError","nnapi":$nnapi,"panelWidth":$panelW,"debug":"$dbg"}"""
+                            val json = JSONObject().apply {
+                                put("running", capture.isRunning)
+                                put("hasScreenshot", capture.latestScreenshot != null)
+                                put("captureCount", capture.captureCount)
+                                put("timeSinceLast", timeSinceLast)
+                                put("error", capture.lastError)
+                                put("modelLoaded", modelLoaded)
+                                put("modelError", modelError)
+                                put("nnapi", nnapi)
+                                put("panelWidth", panelW)
+                                put("debug", dbg)
+                            }.toString()
                             newFixedLengthResponse(Response.Status.OK, "application/json", json).apply {
                                 addHeader("Access-Control-Allow-Origin", "*")
                                 addHeader("Cache-Control", "no-cache, no-store")

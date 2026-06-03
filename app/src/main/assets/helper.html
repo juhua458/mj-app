@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>🀄 捉鸡麻将提示器 v22.3</title>
+<title>🀄 捉鸡麻将提示器 v22.4</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{--bg:#0a0e1a;--bg2:#131825;--card:#1c2333;--text:#e8edf5;--text2:#8b95a8;--red:#e54545;--green:#2ebd5e;--blue:#4a8eff;--gold:#f0a030;--purple:#9b5dff}
@@ -61,7 +61,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 </head>
 <body>
 <div class="app">
-<div class="top-bar"><h1>🀄 v22.3 YOLO</h1></div>
+<div class="top-bar"><h1>🀄 v22.4 YOLO</h1></div>
 <div class="status-row">
 <div class="status-dot off" id="statusDot"></div>
 <span class="status-text" id="statusText">未启动</span>
@@ -358,7 +358,7 @@ async function startAuto(){
   document.getElementById('btnStop').style.display='';
   document.getElementById('statusDot').className='status-dot try';
   document.getElementById('statusText').textContent='连接中...';
-  log('▶ v22.3 启动 YOLO识别 (letterbox+裁剪)');
+  log('▶ v22.4 启动 YOLO识别 (letterbox+裁剪)');
   tryAutoConnect();
 }
 
@@ -428,7 +428,7 @@ function snapOnce(){
   });
 }
 
-window.onload=function(){populateAddSelect();log('🀄 v22.3 YOLO letterbox+裁剪版就绪')};
+window.onload=function(){populateAddSelect();log('🀄 v22.4 YOLO letterbox+裁剪版就绪')};
 </script>
 </body>
 </html>
