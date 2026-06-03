@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>🀄 捉鸡麻将提示器 v22.5</title>
+<title>🀄 捉鸡麻将提示器 v22.6</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{--bg:#0a0e1a;--bg2:#131825;--card:#1c2333;--text:#e8edf5;--text2:#8b95a8;--red:#e54545;--green:#2ebd5e;--blue:#4a8eff;--gold:#f0a030;--purple:#9b5dff}
@@ -95,6 +95,20 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 <div class="discard-pool" id="discardPool"></div>
 <div class="discard-add"><select id="addTileSel"></select><button onclick="addDiscard()">+添加</button></div>
 </div>
+<div class="cloud-section" style="padding:4px 8px;background:var(--bg2);flex-shrink:0">
+<div style="font-size:.6rem;color:var(--text2);margin-bottom:2px;display:flex;justify-content:space-between">
+<span>☁️ 云推理</span>
+<span id="cloudStatus" style="color:var(--red)">未配置</span>
+</div>
+<div style="display:flex;gap:4px;margin-bottom:3px">
+<input id="cloudUrlInput" type="text" placeholder="https://xxx.hf.space" style="flex:1;padding:2px 4px;border-radius:3px;background:var(--card);color:var(--text);border:1px solid #333;font-size:.55rem">
+<button onclick="setCloudUrl()" style="padding:2px 8px;border-radius:3px;background:var(--green);color:#fff;border:none;font-size:.55rem;font-weight:700">设置</button>
+</div>
+<div style="display:flex;gap:6px;align-items:center">
+<label style="font-size:.55rem;color:var(--text2);cursor:pointer"><input type="checkbox" id="useCloudChk" checked onchange="toggleCloud()"> 优先云推理</label>
+<button onclick="testCloud()" style="padding:1px 6px;border-radius:3px;background:var(--blue);color:#fff;border:none;font-size:.5rem">测试</button>
+</div>
+</div>
 <div class="resize-hint">◀ 拖左边缘调宽 | 拖底部调高 ▼</div>
 <div class="debug-toggle" onclick="toggleDebug()">调试信息 ▶</div>
 <div class="debug" id="debugPanel" style="display:none"></div>
@@ -110,8 +124,48 @@ var isAuto=false;
 var autoTimer=null;
 var debugVisible=false;
 var modelLoadRetries=0;
+var cloudUrl='';
 
-function log(s){var p=document.getElementById('debugPanel');if(p)p.textContent+=s+'\n';if(p)p.scrollTop=p.scrollHeight;try{if(window.AndroidStatus&&handSize>0)window.AndroidStatus.updateStatus('🀄 v22.5 YOLO | '+handSize+'牌')}catch(e){}}
+function log(s){var p=document.getElementById('debugPanel');if(p)p.textContent+=s+'\n';if(p)p.scrollTop=p.scrollHeight;try{if(window.AndroidStatus&&handSize>0)window.AndroidStatus.updateStatus('🀄 v22.6 Cloud | '+handSize+'牌')}catch(e){}}
+
+// ============ 云推理配置 ============
+async function loadCloudConfig(){
+  try{
+    var r=await fetch(APP_URL+'/api/cloud_status',{cache:'no-store',signal:AbortSignal.timeout(3000)});
+    if(r.ok){var d=await r.json();cloudUrl=d.cloudUrl||'';document.getElementById('cloudUrlInput').value=cloudUrl;document.getElementById('useCloudChk').checked=d.useCloud;updateCloudStatusUI()}
+  }catch(e){log('⚠️ 云配置加载失败')}
+}
+async function setCloudUrl(){
+  var url=document.getElementById('cloudUrlInput').value.trim().replace(/\/$/,'');
+  var useCloud=document.getElementById('useCloudChk').checked;
+  try{
+    var r=await fetch(APP_URL+'/api/cloud_set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url,use:useCloud}),signal:AbortSignal.timeout(3000)});
+    if(r.ok){var d=await r.json();cloudUrl=d.cloudUrl;log('✅ 云推理: '+cloudUrl);updateCloudStatusUI()}
+  }catch(e){log('❌ 设置失败: '+e.message)}
+}
+async function toggleCloud(){
+  var useCloud=document.getElementById('useCloudChk').checked;
+  try{await fetch(APP_URL+'/api/cloud_set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({use:useCloud}),signal:AbortSignal.timeout(3000)})}catch(e){}
+  updateCloudStatusUI();
+}
+async function testCloud(){
+  var url=document.getElementById('cloudUrlInput').value.trim().replace(/\/$/,'');
+  if(!url){log('❌ 请先填写云推理URL');return}
+  try{
+    log('🔄 测试云推理: '+url);
+    var r=await fetch(url+'/',{cache:'no-store',signal:AbortSignal.timeout(8000)});
+    if(r.ok){var d=await r.json();log('✅ 云服务正常: '+JSON.stringify(d))}
+    else{log('❌ 云服务返回: HTTP '+r.status)}
+  }catch(e){log('❌ 连接失败: '+e.message)}
+}
+function updateCloudStatusUI(){
+  var el=document.getElementById('cloudStatus');
+  var chk=document.getElementById('useCloudChk');
+  if(cloudUrl&&chk.checked){el.textContent='已启用';el.style.color='var(--green)'}
+  else if(cloudUrl){el.textContent='已暂停';el.style.color='var(--gold)'}
+  else{el.textContent='未配置';el.style.color='var(--red)'}
+}
+
 function toggleDebug(){debugVisible=!debugVisible;document.getElementById('debugPanel').style.display=debugVisible?'block':'none';document.querySelector('.debug-toggle').textContent=debugVisible?'调试信息 ▼':'调试信息 ▶'}
 
 function getSuit(i){return i<9?'wan':i<18?'tiao':'tong'}
@@ -357,7 +411,7 @@ async function startAuto(){
   document.getElementById('btnStop').style.display='';
   document.getElementById('statusDot').className='status-dot try';
   document.getElementById('statusText').textContent='连接中...';
-  log('▶ v22.5 启动 YOLO识别 (CPU模式+letterbox+裁剪)');
+  log('▶ v22.6 启动 YOLO识别 (CPU模式+letterbox+裁剪)');
   tryAutoConnect();
 }
 
@@ -427,7 +481,7 @@ function snapOnce(){
   });
 }
 
-window.onload=function(){populateAddSelect();log('🀄 v22.5 YOLO CPU模式+letterbox+裁剪版就绪')};
+window.onload=function(){populateAddSelect();loadCloudConfig();log('🀄 v22.6 Cloud CPU模式+letterbox+裁剪版就绪')};
 </script>
 </body>
 </html>
