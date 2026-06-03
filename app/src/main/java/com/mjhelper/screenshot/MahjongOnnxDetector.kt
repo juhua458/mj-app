@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
@@ -14,15 +15,15 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * ONNX Runtime 麻将牌识别引擎 v5
+ * ONNX Runtime 麻将牌识别引擎 v6
  * 
- * v5修复:
- * 1. ★ 关键BUG修复: ONNX输出bbox是归一化坐标(0-1), 需先乘640转像素空间再反算原始坐标
- * 2. Letterbox预处理(保持宽高比+灰色填充), 与YOLO训练一致
- * 3. FloatBuffer解析输出tensor, 不依赖类型转换
- * 4. 支持截图裁剪(去掉helper面板区域)
- * 5. 降低默认置信度阈值
- * 6. 修复debug信息被覆盖的问题, 保留tensor_shape等关键调试信息
+ * v6修复:
+ * 1. ★ 关键BUG修复: MediaProjection截屏可能是竖屏(832x1758), 需旋转90°变横屏再处理
+ * 2. ONNX输出bbox归一化坐标(0-1)需乘640转像素空间
+ * 3. Letterbox预处理(保持宽高比+灰色填充), 与YOLO训练一致
+ * 4. FloatBuffer解析输出tensor, 不依赖类型转换
+ * 5. 支持截图裁剪(去掉helper面板区域)
+ * 6. debug信息保留tensor_shape等关键排错数据
  */
 class MahjongOnnxDetector(context: Context) {
     
@@ -197,16 +198,40 @@ class MahjongOnnxDetector(context: Context) {
         if (!isLoaded || session == null || env == null) return null
         
         return try {
-            // 1. 裁剪掉右侧helper面板区域
-            val cropWidth = if (cropRight > 0 && cropRight < bitmap.width) {
-                bitmap.width - cropRight
-            } else {
-                bitmap.width
+            // 0. ★ v6关键修复: 竖屏截图旋转90°变横屏
+            // MediaProjection可能在竖屏方向创建VirtualDisplay, 即使游戏是横屏
+            // 检测: 如果bitmap宽<高, 说明是竖屏截图, 需顺时针旋转90°
+            var workingBitmap = bitmap
+            var wasRotated = false
+            if (bitmap.width < bitmap.height) {
+                val matrix = Matrix()
+                matrix.postRotate(90f)
+                workingBitmap = Bitmap.createBitmap(
+                    bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
+                )
+                wasRotated = true
             }
-            val croppedBitmap = if (cropWidth < bitmap.width) {
-                Bitmap.createBitmap(bitmap, 0, 0, cropWidth, bitmap.height)
+            
+            // 1. 裁剪掉右侧helper面板区域
+            // 旋转后如果面板在右侧, cropRight需要按比例调整(3/4分辨率)
+            val effectiveCropRight = if (wasRotated) {
+                // 旋转后图片是3/4分辨率, 面板宽度也要按比例缩放
+                // 但如果cropRight=0(竖屏时不裁剪), 保持0
+                if (cropRight > 0) {
+                    val scale = workingBitmap.width.toFloat() / bitmap.height.toFloat()
+                    (cropRight * scale).toInt()
+                } else 0
+            } else cropRight
+            
+            val cropWidth = if (effectiveCropRight > 0 && effectiveCropRight < workingBitmap.width) {
+                workingBitmap.width - effectiveCropRight
             } else {
-                bitmap
+                workingBitmap.width
+            }
+            val croppedBitmap = if (cropWidth < workingBitmap.width) {
+                Bitmap.createBitmap(workingBitmap, 0, 0, cropWidth, workingBitmap.height)
+            } else {
+                workingBitmap
             }
             
             val origW = croppedBitmap.width.toFloat()
@@ -214,7 +239,8 @@ class MahjongOnnxDetector(context: Context) {
             
             // 2. Letterbox预处理
             val (letterboxed, letterboxParams) = letterboxResize(croppedBitmap, 640)
-            if (croppedBitmap !== bitmap) croppedBitmap.recycle()
+            if (croppedBitmap !== workingBitmap) croppedBitmap.recycle()
+            if (wasRotated && workingBitmap !== bitmap) workingBitmap.recycle()
             
             val scale = letterboxParams[0]
             val padX = letterboxParams[1]
@@ -237,7 +263,8 @@ class MahjongOnnxDetector(context: Context) {
             val rawDetections = postprocessFloatBuffer(outputValue, origW, origH, scale, padX, padY, confThreshold)
             
             // 保留postprocessFloatBuffer的debug信息(含tensor_shape), 追加而非覆盖
-            lastDebug = "$lastDebug | crop=${cropWidth}x${bitmap.height} scale=${"%.3f".format(scale)} raw_dets=${rawDetections.size}"
+            val rotInfo = if (wasRotated) "ROTATED(${bitmap.width}x${bitmap.height}→${workingBitmap.width}x${workingBitmap.height})" else ""
+            lastDebug = "$lastDebug | $rotInfo crop=${cropWidth}x${workingBitmap.height} scale=${"%.3f".format(scale)} raw_dets=${rawDetections.size}"
             
             // 6. NMS
             val detections = nms(rawDetections, 0.45f)
