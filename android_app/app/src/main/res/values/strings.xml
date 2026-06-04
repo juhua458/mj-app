@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">麻将牌面检测</string>
+    <string name="app_description">使用ONNX模型检测屏幕中的麻将牌</string>
+    <string name="btn_start_capture">开始截屏检测</string>
+    <string name="btn_stop_service">停止服务</string>
+    <string name="status_ready">状态：就绪</string>
+    <string name="status_capturing">状态：截屏检测中...</string>
+    <string name="status_stopped">状态：已停止</string>
+    <string name="status_error">状态：出错</string>
+    <string name="notification_channel_name">截屏服务</string>
+    <string name="notification_channel_desc">麻将检测截屏服务通知</string>
+    <string name="floating_count">检测到 %d 张麻将牌</string>
+    <string name="permission_overlay_denied">需要悬浮窗权限才能显示检测结果</string>
+    <string name="model_load_success">模型加载成功</string>
+    <string name="model_load_failed">模型加载失败</string>
+</resources>

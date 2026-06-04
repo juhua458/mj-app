@@ -1,105 +1,124 @@
 # 捉鸡麻将AI识别项目
 
+手机端自动识别麻将牌面 + 策略提示（微乐麻将·贵州捉鸡）
+
 ## 项目概述
 
-手机端自动识别麻将牌面 + 策略提示（微乐麻将·贵州捉鸡）
+本项目使用YOLOv8模型进行麻将牌面检测，通过MediaProjection API截屏，在Android端进行ONNX本地推理，实时识别手牌数量。
 
 ## 技术方案
 
-- **模型**: YOLOv8 → ONNX格式
-- **推理**: Android本地推理（ONNX Runtime Mobile）
+- **模型**: YOLOv8n → ONNX格式 (opset=17)
+- **推理**: Android ONNX Runtime Mobile 1.17.0
+- **截屏**: MediaProjection API
 - **设备**: 一加13T，Android 15
 
 ## 项目结构
 
 ```
 mj-project/
-├── models/                 # ONNX模型文件
-│   ├── mahjong-yolon-best.onnx      # 原始模型（opset20）
-│   └── mahjong-yolon-best_opset17.onnx  # 降级模型（opset17）
-├── test_images/            # 测试截图
-├── scripts/                # Python工具脚本
-│   ├── benchmark.py        # 基准测试框架
-│   ├── convert_opset.py    # ONNX模型opset降级工具
-│   ├── android_test.py     # Android自动化测试
-│   └── requirements.txt    # Python依赖
-├── android_app/            # Android项目代码
-└── test_results/           # 测试结果
+├── models/                          # ONNX模型文件
+│   └── mahjong_detect.onnx         # 训练好的检测模型 (opset17, ~12MB)
+├── scripts/                         # Python工具脚本
+│   ├── benchmark.py                # 基准测试框架
+│   ├── convert_opset.py            # ONNX模型opset降级工具
+│   ├── android_test.py             # Android自动化测试
+│   ├── label_mahjong.py            # 数据标注工具
+│   ├── data_augmentation.py        # 数据增强
+│   ├── train_model.py              # 模型训练脚本
+│   └── requirements.txt            # Python依赖
+├── android_app/                     # Android项目
+│   ├── app/src/main/
+│   │   ├── java/com/mahjong/detector/
+│   │   │   ├── MainActivity.java        # 主界面
+│   │   │   ├── MahjongDetector.java     # ONNX推理引擎
+│   │   │   ├── ScreenCaptureService.java # 截屏服务
+│   │   │   └── FloatingViewService.java  # 悬浮窗服务
+│   │   ├── res/                         # 布局和资源
+│   │   └── assets/mahjong_detect.onnx   # ONNX模型
+│   ├── build.gradle
+│   └── BUILD_GUIDE.md              # Android打包指南
+├── test_images/                     # 测试截图
+├── dataset/                         # 训练数据集
+└── README.md                        # 本文件
 ```
 
 ## 快速开始
 
-### 1. 安装依赖
+### 方式一：使用预训练模型（推荐）
+
+模型已训练好并导出为ONNX格式，直接使用：
+
+```bash
+cd android_app
+# 用 Android Studio 打开并打包APK（详见 BUILD_GUIDE.md）
+```
+
+### 方式二：重新训练模型
 
 ```bash
 cd scripts
 pip install -r requirements.txt
+
+# 1. 标注数据
+python label_mahjong.py
+
+# 2. 数据增强
+python data_augmentation.py --num-aug 50 --split
+
+# 3. 训练模型
+python train_model.py --train --epochs 100
+
+# 4. 导出ONNX（opset=17）
+python train_model.py --export --model-path ../runs/train_mahjong/weights/best.pt
 ```
 
-### 2. 模型opset降级（解决Android兼容性问题）
+### 方式三：模型opset降级（已有模型但opset不兼容）
 
 ```bash
 python convert_opset.py \
-    --model ../models/mahjong-yolon-best.onnx \
+    --model model.onnx \
     --opset 17 \
     --verify \
-    --report ../test_results/convert_report.json
+    --report convert_report.json
 ```
 
-### 3. Python端基准测试
+## Android APP 使用
 
-```bash
-python benchmark.py \
-    --model ../models/mahjong-yolon-best_opset17.onnx \
-    --images ../test_images \
-    --output ../test_results/python_benchmark
-```
+1. **安装APK**：`adb install app-debug.apk`
+2. **授予权限**：悬浮窗权限 + 截屏权限
+3. **打开APP**：点击"开始检测"
+4. **查看结果**：悬浮窗显示检测到的麻将牌数量
 
-### 4. Android端自动化测试
+## 模型信息
 
-```bash
-# 确保手机连接并开启USB调试
-python android_test.py \
-    --model ../models/mahjong-yolon-best_opset17.onnx \
-    --package com.example.mjapp \
-    --tests 10 \
-    --output ../test_results/android_benchmark
-```
+| 属性 | 值 |
+|------|-----|
+| 模型 | YOLOv8n |
+| 类别 | 1类 (mahjong_tile) |
+| 输入 | 640x640 RGB |
+| 输出 | 检测框 + 置信度 |
+| opset | 17 |
+| 大小 | ~12MB |
+| 训练数据 | 4张截图（数据增强后） |
 
-## 已知问题与解决方案
+## 已知问题
 
-### 问题：Android端检测数只有2个（Python端有103个）
-
-**根因**: ONNX模型opset=20 与 Android ONNX Runtime Mobile 1.17.0 不兼容
-
-**解决方案**:
-1. 模型opset降级 20→17（主方案）
-2. 升级Android ORT 1.17.0→1.21+（辅助方案）
-
-**建议**: 双保险，两个方案同时实施
-
-## 测试结果
-
-### Python端（基准）
-- 检测数: 103~111（置信度>0.25）
-- 推理时间: ~50ms
-
-### Android端（修复前）
-- 检测数: 2（置信度>0.25）
-- 问题: opset不兼容导致Split算子解析错误
-
-### Android端（修复后）
-- 待验证...
+- 当前模型基于4张截图训练，检测精度有限
+- 建议收集更多截图重新训练以提高准确率
+- 只检测手牌区域，不识别具体牌面类别
 
 ## 开发计划
 
 - [x] 问题排查与根因定位
 - [x] Python自动化测试框架
 - [x] ONNX模型opset降级工具
-- [ ] Android推理模块修复
-- [ ] Android自动化测试
-- [ ] 策略提示模块
-- [ ] 性能优化
+- [x] 数据标注工具
+- [x] 数据增强
+- [x] 模型训练
+- [x] Android推理模块
+- [ ] 策略提示功能（下一步）
+- [ ] 多类别牌面识别
 
 ## 项目仓库
 
