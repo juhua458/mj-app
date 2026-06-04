@@ -1,0 +1,20 @@
+# 麻将AI识别项目 - Python依赖
+
+# 深度学习推理
+onnx>=1.15.0
+onnxruntime>=1.17.0
+
+# 图像处理
+opencv-python>=4.8.0
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# Android自动化测试
+adb-shell>=0.4.0
+pure-python-adb>=0.3.0
+
+# 数据可视化
+matplotlib>=3.7.0
+
+# 其他工具
+tqdm>=4.65.0
