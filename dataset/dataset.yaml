@@ -1,4 +1,4 @@
-path: /data/user/work/dataset_v2
+path: .
 train: images/train
 val: images/val
 
