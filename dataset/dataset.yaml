@@ -1,0 +1,6 @@
+path: /data/user/work/dataset_v2
+train: images/train
+val: images/val
+
+nc: 1
+names: ['mahjong_tile']
